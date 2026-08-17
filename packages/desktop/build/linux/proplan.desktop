@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Proplan
+Comment=Project notes, tasks, and timeline management
+Exec=Proplan
+Terminal=false
+Type=Application
+Icon=proplan
+Categories=Office;Utility;
+Keywords=Proplan;projects;notes;tasks;
+StartupWMClass=Proplan

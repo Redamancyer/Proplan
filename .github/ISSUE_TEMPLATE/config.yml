@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a Question
+    url: https://github.com/Runningheart/Proplan/discussions
+    about: Use GitHub Discussions for questions and help with Proplan.
+  - name: Documentation
+    url: https://github.com/Runningheart/Proplan#readme
+    about: Check the README for development, packaging, and data-storage information.
