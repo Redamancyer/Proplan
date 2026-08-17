@@ -27,11 +27,12 @@ Proplan 不再提供原 MarkText 的独立 Markdown 文件编辑功能，也不�
 - [Vue 3](https://vuejs.org/) 与 TypeScript：渲染进程界面
 - [Pinia](https://pinia.vuejs.org/)：应用状态管理
 - [Muya](https://github.com/marktext/muya)：实时 Markdown 编辑器
+- [SQLite](https://www.sqlite.org/)：项目、备忘、任务和时间轴的本地持久化
 - pnpm workspace：管理桌面端与编辑器软件包
 
 ## 环境要求
 
-- Node.js 20.19 或更高版本
+- Node.js 22.5 或更高版本（开发和测试使用内置 `node:sqlite`）
 - pnpm 10 或更高版本
 - 使用 macOS 打包时，需要安装 Xcode 和 Xcode Command Line Tools
 
@@ -87,11 +88,16 @@ Proplan 采用本地优先设计，无需注册账号，也不依赖远程数据
 
 ```text
 ~/Library/Application Support/Proplan/
-|-- proplan-data.json       # 项目、备忘、任务和时间轴数据
+|-- proplan.sqlite          # 项目、备忘、任务和时间轴数据
 |-- proplan-assets/         # 应用托管的图片
 |-- preferences.json        # 应用偏好设置
+|-- proplan-data.pre-sqlite.json # 首次迁移 SQLite 后保留的旧数据
 `-- proplan-before-restore.proplan-backup
 ```
+
+从使用 JSON 存储的旧版本升级时，Proplan 会在首次启动时通过事务将
+`proplan-data.json` 导入 SQLite。迁移成功后，原文件会保留为
+`proplan-data.pre-sqlite.json`，后续启动不会重复导入。
 
 通过偏好设置创建的备份使用 `.proplan-backup` 扩展名，可保存至用户选择的任意位置。恢复操作替换本地数据前，应用会自动创建一份安全备份。
 

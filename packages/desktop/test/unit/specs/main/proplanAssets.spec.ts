@@ -30,6 +30,7 @@ import {
   readLocalImage
 } from 'main_renderer/ipc/proplan'
 import type { ProplanDatabase } from '@shared/types/proplan'
+import { PROPLAN_DATABASE_FILENAME, readProplanDatabase } from 'main_renderer/database/proplan'
 
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -133,6 +134,7 @@ describe('Proplan managed image assets', () => {
     const timestamp = new Date().toISOString()
     const database: ProplanDatabase = {
       version: 1,
+      globalTaskOrder: [],
       projects: [
         {
           id: 'project-1',
@@ -162,9 +164,10 @@ describe('Proplan managed image assets', () => {
     await expect(fs.pathExists(flattenedImage)).resolves.toBe(true)
     await expect(fs.pathExists(legacyDir)).resolves.toBe(false)
     expect(migrated.projects[0].memos[0].markdown).toContain(pathToFileURL(flattenedImage).href)
-    await expect(
-      fs.readFile(path.join(electronMock.userDataPath, 'proplan-data.json'), 'utf8')
-    ).resolves.toContain(pathToFileURL(flattenedImage).href)
+    expect(
+      readProplanDatabase(path.join(electronMock.userDataPath, PROPLAN_DATABASE_FILENAME))
+        .projects[0].memos[0].markdown
+    ).toContain(pathToFileURL(flattenedImage).href)
   })
 
   it('validates backup metadata, image hashes, and safe asset filenames', () => {

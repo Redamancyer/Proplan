@@ -21,23 +21,34 @@
         </button>
       </header>
       <div class="project-list">
-        <button
-          v-for="project in projects"
-          :key="project.id"
-          class="project-row"
-          :class="{ active: project.id === selectedProjectId && view !== 'globalTasks' }"
-          @click="store.selectProject(project.id)"
-          @contextmenu.prevent.stop="openProjectContextMenu(project.id, project.name, $event)"
-        >
-          <span
-            class="project-mark"
-            :style="{ background: project.color }"
-          />
-          <span class="project-row-copy">
-            <span class="row-title">{{ project.name }}</span>
-            <span class="row-meta">{{ project.tasks.filter((task) => !task.completed).length }} 项待办</span>
-          </span>
-        </button>
+        <TransitionGroup name="list-reorder">
+          <button
+            v-for="project in projects"
+            :key="project.id"
+            class="project-row"
+            :class="{
+              active: project.id === selectedProjectId && view !== 'globalTasks',
+              dragging: draggedProjectId === project.id
+            }"
+            draggable="true"
+            @click="store.selectProject(project.id)"
+            @contextmenu.prevent.stop="openProjectContextMenu(project.id, project.name, $event)"
+            @dragstart="startProjectDrag(project.id, $event)"
+            @dragover.prevent
+            @dragenter.prevent="previewProjectOrder(project.id)"
+            @drop.prevent="endDrag"
+            @dragend="endDrag"
+          >
+            <span
+              class="project-mark"
+              :style="{ background: project.color }"
+            />
+            <span class="project-row-copy">
+              <span class="row-title">{{ project.name }}</span>
+              <span class="row-meta">{{ project.tasks.filter((task) => !task.completed).length }} 项待办</span>
+            </span>
+          </button>
+        </TransitionGroup>
         <button
           v-if="projects.length === 0"
           class="empty-project-button"
@@ -159,47 +170,55 @@
         class="record-list"
         :class="{ 'timeline-list': view === 'timeline' }"
       >
-        <button
-          v-for="record in records"
-          :key="record.id"
-          class="record-row"
-          :class="{ active: record.id === selectedRecordId }"
-          @click="store.selectRecord(record.id)"
-          @contextmenu.prevent.stop="openRecordContextMenu(record, $event)"
-        >
-          <span
-            v-if="view === 'timeline'"
-            class="timeline-marker"
-            aria-hidden="true"
+        <TransitionGroup name="list-reorder">
+          <button
+            v-for="record in records"
+            :key="record.id"
+            class="record-row"
+            :class="{ active: record.id === selectedRecordId, dragging: draggedRecordId === record.id }"
+            :draggable="canReorderRecords"
+            @click="store.selectRecord(record.id)"
+            @contextmenu.prevent.stop="openRecordContextMenu(record, $event)"
+            @dragstart="startRecordDrag(record.id, $event)"
+            @dragover="allowRecordDrop"
+            @dragenter="previewRecordOrder(record.id, $event)"
+            @drop.prevent="endDrag"
+            @dragend="endDrag"
           >
-            <span class="timeline-node" />
-          </span>
-          <span
-            v-else-if="isTask(record)"
-            class="task-check"
-            :class="{ checked: record.completed }"
-            @click.stop="store.toggleTask(record.id)"
-          >
-            <Check v-if="record.completed" />
-          </span>
-          <span
-            v-else
-            class="record-icon"
-          >
-            <Edit />
-          </span>
-          <span class="record-copy">
             <span
-              class="row-title"
-              :class="{ completed: isTask(record) && record.completed }"
-            >{{
-              record.title
-            }}</span>
-            <span class="row-meta">
-              <template v-if="view === 'globalTasks'">{{ taskProjectName(record.id) }} · </template>{{ recordMeta(record) }}
+              v-if="view === 'timeline'"
+              class="timeline-marker"
+              aria-hidden="true"
+            >
+              <span class="timeline-node" />
             </span>
-          </span>
-        </button>
+            <span
+              v-else-if="isTask(record)"
+              class="task-check"
+              :class="{ checked: record.completed }"
+              @click.stop="store.toggleTask(record.id)"
+            >
+              <Check v-if="record.completed" />
+            </span>
+            <span
+              v-else
+              class="record-icon"
+            >
+              <Edit />
+            </span>
+            <span class="record-copy">
+              <span
+                class="row-title"
+                :class="{ completed: isTask(record) && record.completed }"
+              >{{
+                record.title
+              }}</span>
+              <span class="row-meta">
+                <template v-if="view === 'globalTasks'">{{ taskProjectName(record.id) }} · </template>{{ recordMeta(record) }}
+              </span>
+            </span>
+          </button>
+        </TransitionGroup>
 
         <div
           v-if="records.length === 0"
@@ -239,18 +258,11 @@
           </div>
 
           <div
-            v-if="isTask(selectedRecord)"
+            v-if="isTask(selectedRecord) || isTimeline(selectedRecord)"
             class="record-properties no-drag"
           >
-            <label class="completion-control">
-              <input
-                type="checkbox"
-                :checked="selectedRecord.completed"
-                @change="store.toggleTask(selectedRecord.id)"
-              >
-              <span>{{ selectedRecord.completed ? '已完成' : '待完成' }}</span>
-            </label>
             <label
+              v-if="isTask(selectedRecord)"
               class="due-date-control"
               :class="{ empty: !selectedRecord.dueAt }"
               title="设置截止日期"
@@ -268,6 +280,27 @@
                 :value="selectedRecord.dueAt ?? ''"
                 aria-label="截止日期"
                 @change="updateDueDate"
+              >
+            </label>
+            <label
+              v-else
+              class="due-date-control"
+              :class="{ empty: !selectedRecord.occurredAt }"
+              title="设置发生日期和时间"
+              @click.prevent="openRecordDatePicker"
+            >
+              <Calendar aria-hidden="true" />
+              <span
+                class="due-date-label"
+                aria-hidden="true"
+              >{{ timelineDateLabel }}</span>
+              <input
+                ref="recordDateInput"
+                class="due-date-input"
+                type="datetime-local"
+                :value="dateTimeLocalValue(selectedRecord.occurredAt)"
+                aria-label="发生日期和时间"
+                @change="updateTimelineDate"
               >
             </label>
             <span
@@ -381,12 +414,20 @@ const {
   selectedRecordProject,
   saving,
   saveError,
+  lastSavedAt,
+  lastSaveKind,
+  hasUnsavedChanges,
   currentDateKey,
   view
 } = storeToRefs(store)
 const projectWidth = ref(PROJECT_MIN)
 const recordWidth = ref(RECORD_MIN)
 const dueDateInput = ref<HTMLInputElement | null>(null)
+const recordDateInput = ref<HTMLInputElement | null>(null)
+const draggedProjectId = ref<string | null>(null)
+const draggedRecordId = ref<string | null>(null)
+const projectDragTargetId = ref<string | null>(null)
+const recordDragTargetId = ref<string | null>(null)
 const recordContextMenu = ref<{
   kind: 'project' | 'record'
   id: string
@@ -458,9 +499,21 @@ const detailEmptyTitle = computed(() => {
 })
 const saveStatus = computed(() => {
   if (saveError.value) return '保存失败'
+  if (saving.value) return '正在保存…'
+  if (hasUnsavedChanges.value) return autoSave.value ? '等待自动保存' : '有未保存更改'
+  if (lastSavedAt.value && lastSaveKind.value) {
+    const date = lastSavedAt.value
+    const time = [date.getHours(), date.getMinutes(), date.getSeconds()]
+      .map((part) => String(part).padStart(2, '0'))
+      .join(':')
+    return `${lastSaveKind.value === 'manual' ? '手动保存成功' : '自动保存成功'} ${time}`
+  }
   if (!autoSave.value) return '退出时保存'
-  return saving.value ? '正在保存…' : '已自动保存'
+  return '无未保存更改'
 })
+const canReorderRecords = computed(
+  () => view.value === 'memos' || view.value === 'tasks' || view.value === 'globalTasks'
+)
 const dueDateLabel = computed(() => {
   const record = selectedRecord.value
   if (!record || !isTask(record) || !record.dueAt) return '截止日期'
@@ -469,6 +522,11 @@ const dueDateLabel = computed(() => {
   return year === new Date().getFullYear()
     ? `${month}月${day}日`
     : `${year}年${month}月${day}日`
+})
+const timelineDateLabel = computed(() => {
+  const record = selectedRecord.value
+  if (!record || !isTimeline(record) || !record.occurredAt) return '发生日期和时间'
+  return formatDateTime(record.occurredAt)
 })
 
 const isTask = (record: ProplanRecord): record is ProplanTask => 'completed' in record
@@ -524,9 +582,67 @@ const removeContextTarget = (): void => {
 
 const handleContextMenuKeydown = (event: KeyboardEvent): void => {
   if (event.key === 'Escape') closeRecordContextMenu()
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    performManualSave().catch(() => undefined)
+  }
+}
+
+const performManualSave = async (): Promise<void> => {
+  try {
+    await store.flushSave('manual')
+  } catch (error) {
+    await notice.notify({
+      title: '保存失败',
+      message: error instanceof Error ? error.message : String(error),
+      type: 'error'
+    })
+    throw error
+  }
 }
 
 const eventValue = (event: Event): string => (event.target as HTMLInputElement).value
+
+const startProjectDrag = (projectId: string, event: DragEvent): void => {
+  draggedProjectId.value = projectId
+  projectDragTargetId.value = null
+  event.dataTransfer?.setData('text/plain', projectId)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+const previewProjectOrder = (targetId: string): void => {
+  const sourceId = draggedProjectId.value
+  if (!sourceId || sourceId === targetId || projectDragTargetId.value === targetId) return
+  projectDragTargetId.value = targetId
+  store.reorderProjects(sourceId, targetId)
+}
+const startRecordDrag = (recordId: string, event: DragEvent): void => {
+  if (!canReorderRecords.value) {
+    event.preventDefault()
+    return
+  }
+  draggedRecordId.value = recordId
+  recordDragTargetId.value = null
+  event.dataTransfer?.setData('text/plain', recordId)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+const allowRecordDrop = (event: DragEvent): void => {
+  if (canReorderRecords.value) event.preventDefault()
+}
+const previewRecordOrder = (targetId: string, event: DragEvent): void => {
+  if (!canReorderRecords.value) return
+  event.preventDefault()
+  const sourceId = draggedRecordId.value
+  if (!sourceId || sourceId === targetId || recordDragTargetId.value === targetId) return
+  recordDragTargetId.value = targetId
+  if (view.value === 'globalTasks') store.reorderGlobalTasks(sourceId, targetId)
+  else store.reorderRecords(sourceId, targetId)
+}
+const endDrag = (): void => {
+  draggedProjectId.value = null
+  draggedRecordId.value = null
+  projectDragTargetId.value = null
+  recordDragTargetId.value = null
+}
 
 const updateProjectName = (event: Event): void => {
   if (selectedProject.value) { store.updateProject(selectedProject.value.id, { name: eventValue(event) }) }
@@ -547,16 +663,39 @@ const openDueDatePicker = (): void => {
 }
 const updateDueDate = (event: Event): void =>
   store.updateSelectedRecord({ dueAt: eventValue(event) || null })
+const openRecordDatePicker = (): void => {
+  const input = recordDateInput.value
+  if (!input) return
+  input.focus({ preventScroll: true })
+  input.showPicker()
+}
+const updateTimelineDate = (event: Event): void => {
+  const value = eventValue(event)
+  if (value) store.updateSelectedRecord({ occurredAt: value })
+}
+
+const dateTimeLocalValue = (value: string): string => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16)
+  const part = (number: number): string => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}T${part(date.getHours())}:${part(date.getMinutes())}`
+}
+
+const formatDateTime = (value: string): string => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value.replace('T', ' ')
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+}
 
 const taskProjectName = (taskId: string): string =>
   globalTasks.value.find(({ task }) => task.id === taskId)?.projectName ?? ''
-
-const formatTimestamp = (value: string): string => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  const part = (number: number): string => String(number).padStart(2, '0')
-  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())} ${part(date.getHours())}:${part(date.getMinutes())}:${part(date.getSeconds())}`
-}
 
 const openGlobalCalendarItem = (taskId: string): void => {
   store.setGlobalTaskFilter('all')
@@ -570,12 +709,7 @@ const openProjectCalendarItem = (recordId: string, section: ProplanSection): voi
 
 const recordMeta = (record: ProplanRecord): string => {
   if (isTask(record)) return record.dueAt ? `截止 ${record.dueAt}` : '无截止日期'
-  if (isTimeline(record)) {
-    const timestamp = /[T\s]\d{2}:\d{2}:\d{2}/.test(record.occurredAt)
-      ? record.occurredAt
-      : record.createdAt
-    return formatTimestamp(timestamp)
-  }
+  if (isTimeline(record)) return formatDateTime(record.occurredAt)
   return new Date(record.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
@@ -796,7 +930,7 @@ button {
   align-items: center;
   text-align: left;
   background: transparent;
-  cursor: default;
+  cursor: grab;
 }
 
 .project-row {
@@ -809,6 +943,26 @@ button {
 .project-row:hover,
 .project-row.active {
   background: var(--editorColor10);
+}
+
+.project-row.dragging,
+.record-row.dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.record-row[draggable='false'] {
+  cursor: default;
+}
+
+.list-reorder-move {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list-reorder-move {
+    transition-duration: 0.01ms;
+  }
 }
 
 .project-mark {
@@ -1264,9 +1418,6 @@ button {
   opacity: 0;
   cursor: default;
   pointer-events: none;
-}
-.completion-control input {
-  accent-color: var(--accent);
 }
 .project-chip {
   margin-left: auto;

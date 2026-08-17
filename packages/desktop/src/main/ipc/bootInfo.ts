@@ -1,48 +1,7 @@
 import path from 'path'
 import fs from 'fs-extra'
 import { app, ipcMain } from 'electron'
-import { rgPath } from '@vscode/ripgrep'
-import { MARKDOWN_INCLUSIONS } from 'common/filesystem/paths'
 import type { BootInfo } from '@shared/types/ipc'
-
-const ENV_ALLOWLIST = [
-  'NODE_ENV',
-  'PERF_TESTING',
-  'APPIMAGE',
-  'MARKTEXT_VERSION',
-  'MARKTEXT_VERSION_STRING',
-  'MARKTEXT_RIPGREP_PATH',
-  'PATH',
-  'HOME'
-]
-
-const pickEnv = (): Record<string, string> => {
-  const out: Record<string, string> = {}
-  for (const key of ENV_ALLOWLIST) {
-    const value = process.env[key]
-    if (value !== undefined) out[key] = value
-  }
-  return out
-}
-
-const resolveRipgrepBinary = (): string => {
-  if (process.env.MARKTEXT_RIPGREP_PATH) {
-    return process.env.MARKTEXT_RIPGREP_PATH
-  }
-  return rgPath.replace(/\bapp\.asar\b/, 'app.asar.unpacked')
-}
-
-const computeIsUpdatable = (): boolean => {
-  const resources = process.resourcesPath
-  if (!resources) return false
-  try {
-    if (!fs.pathExistsSync(path.join(resources, 'app-update.yml'))) return false
-  } catch {
-    return false
-  }
-  if (process.env.APPIMAGE) return true
-  return process.platform === 'win32' || process.platform === 'darwin'
-}
 
 const buildBootInfo = (): BootInfo => ({
   platform: process.platform,
@@ -52,31 +11,26 @@ const buildBootInfo = (): BootInfo => ({
     chrome: process.versions.chrome,
     electron: process.versions.electron
   },
-  env: pickEnv(),
+  env: Object.fromEntries(
+    ['NODE_ENV', 'MARKTEXT_VERSION', 'MARKTEXT_VERSION_STRING'].flatMap((key) =>
+      process.env[key] === undefined ? [] : [[key, process.env[key] as string]]
+    )
+  ),
   paths: {
-    ripgrepBinary: resolveRipgrepBinary(),
     resources: process.resourcesPath,
     userData: app.getPath('userData'),
     cwd: process.cwd()
   },
-  isUpdatable: computeIsUpdatable(),
-  MARKDOWN_INCLUSIONS: [...MARKDOWN_INCLUSIONS]
+  isUpdatable:
+    (process.platform === 'darwin' || process.platform === 'win32' || !!process.env.APPIMAGE) &&
+    fs.pathExistsSync(path.join(process.resourcesPath, 'app-update.yml'))
 })
 
 let cached: BootInfo | null = null
 
 export const registerBootInfo = (): void => {
   ipcMain.on('mt::boot-info', (event) => {
-    if (!cached) cached = buildBootInfo()
+    cached ??= buildBootInfo()
     event.returnValue = cached
   })
-  ipcMain.handle('mt::boot-info-async', () => {
-    if (!cached) cached = buildBootInfo()
-    return cached
-  })
-}
-
-export const getBootInfo = (): BootInfo => {
-  if (!cached) cached = buildBootInfo()
-  return cached
 }

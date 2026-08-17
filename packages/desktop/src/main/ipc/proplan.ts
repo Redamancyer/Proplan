@@ -3,8 +3,16 @@ import { createHash, randomUUID } from 'crypto'
 import { fileURLToPath, pathToFileURL } from 'url'
 import fs from 'fs-extra'
 import writeFileAtomic from 'write-file-atomic'
-import { app, BrowserWindow, dialog, ipcMain, net } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, shell } from 'electron'
 import type { IpcMainEvent } from 'electron'
+import {
+  LEGACY_PROPLAN_BACKUP_FILENAME,
+  LEGACY_PROPLAN_DATA_FILENAME,
+  PROPLAN_DATABASE_FILENAME,
+  isProplanDatabaseInitialized,
+  readProplanDatabase,
+  writeProplanDatabase
+} from '../database/proplan'
 import {
   createEmptyProplanDatabase,
   type ProplanBackupResult,
@@ -19,7 +27,6 @@ import {
   type ProplanTimelineEntry
 } from '@shared/types/proplan'
 
-const DATA_FILENAME = 'proplan-data.json'
 const ASSETS_DIRNAME = 'proplan-assets'
 const BACKUP_FORMAT = 'proplan-backup'
 const BACKUP_VERSION = 1
@@ -162,13 +169,28 @@ export const normalizeProplanDatabase = (value: unknown): ProplanDatabase => {
       recordIds.add(record.id)
     }
   }
+  const taskIds = new Set(projects.flatMap((project) => project.tasks.map((task) => task.id)))
+  const requestedOrder = Array.isArray(value.globalTaskOrder)
+    ? value.globalTaskOrder.filter((id): id is string => typeof id === 'string')
+    : []
+  const globalTaskOrder = [...new Set(requestedOrder)].filter((id) => taskIds.has(id))
+  for (const project of projects) {
+    for (const task of project.tasks) {
+      if (!globalTaskOrder.includes(task.id)) globalTaskOrder.push(task.id)
+    }
+  }
   return {
     version: 1,
-    projects
+    projects,
+    globalTaskOrder
   }
 }
 
-const getDataPath = (): string => path.join(app.getPath('userData'), DATA_FILENAME)
+const getDataPath = (): string => path.join(app.getPath('userData'), PROPLAN_DATABASE_FILENAME)
+const getLegacyDataPath = (): string =>
+  path.join(app.getPath('userData'), LEGACY_PROPLAN_DATA_FILENAME)
+const getLegacyBackupPath = (): string =>
+  path.join(app.getPath('userData'), LEGACY_PROPLAN_BACKUP_FILENAME)
 const getAssetsPath = (): string => path.join(app.getPath('userData'), ASSETS_DIRNAME)
 
 const assertImageBytes = (data: Buffer, extension: string): void => {
@@ -425,7 +447,7 @@ export const flattenManagedAssets = async(database: ProplanDatabase): Promise<Pr
     }
   }
 
-  await writeFileAtomic(getDataPath(), `${JSON.stringify(migrated, null, 2)}\n`)
+  writeProplanDatabase(getDataPath(), migrated)
   await Promise.all(copiedFiles.map(({ source }) => fs.remove(source)))
   for (const directory of recordDirectories) {
     if ((await fs.readdir(directory)).length === 0) await fs.rmdir(directory)
@@ -447,15 +469,26 @@ const scheduleAssetCleanup = (database: ProplanDatabase): void => {
   }, ASSET_CLEANUP_DELAY)
 }
 
-const loadDatabase = async(): Promise<ProplanDatabase> => {
+export const loadDatabase = async(): Promise<ProplanDatabase> => {
   const dataPath = getDataPath()
-  if (!(await fs.pathExists(dataPath))) {
-    const database = createEmptyProplanDatabase()
-    scheduleAssetCleanup(database)
-    return database
+  const legacyDataPath = getLegacyDataPath()
+  if (!isProplanDatabaseInitialized(dataPath)) {
+    let initialDatabase = createEmptyProplanDatabase()
+    if (await fs.pathExists(legacyDataPath)) {
+      const source = await fs.readFile(legacyDataPath, 'utf8')
+      initialDatabase = normalizeProplanDatabase(JSON.parse(source) as unknown)
+    }
+    writeProplanDatabase(dataPath, initialDatabase)
+    if (await fs.pathExists(legacyDataPath)) {
+      const legacyBackupPath = getLegacyBackupPath()
+      if (!(await fs.pathExists(legacyBackupPath))) {
+        await fs.move(legacyDataPath, legacyBackupPath, { overwrite: false })
+      } else {
+        await fs.remove(legacyDataPath)
+      }
+    }
   }
-  const source = await fs.readFile(dataPath, 'utf8')
-  let database = normalizeProplanDatabase(JSON.parse(source) as unknown)
+  let database = normalizeProplanDatabase(readProplanDatabase(dataPath))
   try {
     database = await flattenManagedAssets(database)
   } catch (error) {
@@ -471,9 +504,7 @@ const saveDatabase = (database: ProplanDatabase): Promise<void> => {
   saveQueue = saveQueue
     .catch(() => undefined)
     .then(async() => {
-      const dataPath = getDataPath()
-      await fs.ensureDir(path.dirname(dataPath))
-      await writeFileAtomic(dataPath, `${JSON.stringify(normalized, null, 2)}\n`)
+      writeProplanDatabase(getDataPath(), normalized)
       const markdown = allMarkdown(normalized)
       for (const filename of pendingAssetFilenames) {
         if (isReferenced(markdown, path.join(getAssetsPath(), filename))) {
@@ -487,9 +518,8 @@ const saveDatabase = (database: ProplanDatabase): Promise<void> => {
 
 const readStoredDatabase = async(): Promise<ProplanDatabase> => {
   const dataPath = getDataPath()
-  if (!(await fs.pathExists(dataPath))) return createEmptyProplanDatabase()
-  const source = await fs.readFile(dataPath, 'utf8')
-  return normalizeProplanDatabase(JSON.parse(source) as unknown)
+  if (!isProplanDatabaseInitialized(dataPath)) return loadDatabase()
+  return normalizeProplanDatabase(readProplanDatabase(dataPath))
 }
 
 const readStoredPreferences = async(): Promise<Record<string, unknown>> => {
@@ -707,9 +737,9 @@ const applyBackupDocument = async(backup: ProplanBackupDocument): Promise<void> 
   const dataPath = getDataPath()
   const assetsPath = getAssetsPath()
   const stageRoot = path.join(userDataPath, `.proplan-restore-${randomUUID()}`)
-  const stageData = path.join(stageRoot, 'new', DATA_FILENAME)
+  const stageData = path.join(stageRoot, 'new', PROPLAN_DATABASE_FILENAME)
   const stageAssets = path.join(stageRoot, 'new', ASSETS_DIRNAME)
-  const rollbackData = path.join(stageRoot, 'rollback', DATA_FILENAME)
+  const rollbackData = path.join(stageRoot, 'rollback', PROPLAN_DATABASE_FILENAME)
   const rollbackAssets = path.join(stageRoot, 'rollback', ASSETS_DIRNAME)
   const hadData = await fs.pathExists(dataPath)
   const hadAssets = await fs.pathExists(assetsPath)
@@ -718,7 +748,7 @@ const applyBackupDocument = async(backup: ProplanBackupDocument): Promise<void> 
 
   await fs.ensureDir(stageAssets)
   await fs.ensureDir(path.dirname(rollbackData))
-  await writeFileAtomic(stageData, `${JSON.stringify(database, null, 2)}\n`)
+  writeProplanDatabase(stageData, database)
   for (const asset of backup.assets) {
     await fs.writeFile(path.join(stageAssets, asset.filename), Buffer.from(asset.data, 'base64'), {
       flag: 'wx'
@@ -817,6 +847,16 @@ const restoreProplan = async(
 }
 
 export const registerProplanHandlers = (): void => {
+  ipcMain.handle('mt::proplan::assets-path', async() => {
+    const assetsPath = getAssetsPath()
+    await fs.ensureDir(assetsPath)
+    return assetsPath
+  })
+  ipcMain.handle('mt::proplan::open-assets-folder', async() => {
+    const assetsPath = getAssetsPath()
+    await fs.ensureDir(assetsPath)
+    return shell.openPath(assetsPath)
+  })
   ipcMain.handle('mt::proplan::backup', backupProplan)
   ipcMain.handle('mt::proplan::load', loadDatabase)
   ipcMain.handle('mt::proplan::import-image', importImage)

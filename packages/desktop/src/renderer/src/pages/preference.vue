@@ -23,7 +23,7 @@ import TitleBar from '@/prefComponents/common/titlebar.vue'
 import SideBar from '@/prefComponents/sideBar/index.vue'
 import { addThemeStyle } from '@/util/theme'
 import { DEFAULT_STYLE } from '@/config'
-import { isOsx } from '@/util'
+const isOsx = window.electron.process.platform === 'darwin'
 
 // Store
 const preferencesStore = usePreferencesStore()
@@ -49,7 +49,7 @@ watch(theme, (newValue, oldValue) => {
 // Lifecycle
 onMounted(() => {
   nextTick(() => {
-    const state = window.marktext?.initialState ?? DEFAULT_STYLE
+    const state = window.proplanBoot?.initialState ?? DEFAULT_STYLE
     addThemeStyle(state.theme ?? DEFAULT_STYLE.theme)
 
     preferencesStore.ASK_FOR_USER_PREFERENCE()

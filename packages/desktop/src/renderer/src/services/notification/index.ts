@@ -1,6 +1,5 @@
 import template from './index.html?raw'
-import { getUniqueId } from '../../util'
-import { sanitize, EXPORT_DOMPURIFY_CONFIG } from '../../util/dompurify'
+import DOMPurify from 'dompurify'
 import './index.css'
 
 export type NotificationType = 'primary' | 'error' | 'warning' | 'info'
@@ -17,12 +16,14 @@ const TYPE_HASH: Record<NotificationType, string> = {
   warning: 'mt-warn',
   info: 'mt-info'
 }
+let notificationId = 0
+const getUniqueId = (): string => `proplan-notification-${++notificationId}`
 
 const fillTemplate = (type: NotificationType, title: string, message: string): string => {
   return template
     .replace(/\{\{icon\}\}/, INON_HASH[type])
-    .replace(/\{\{title\}\}/, sanitize(title, EXPORT_DOMPURIFY_CONFIG))
-    .replace(/\{\{message\}\}/, sanitize(message, EXPORT_DOMPURIFY_CONFIG))
+    .replace(/\{\{title\}\}/, DOMPurify.sanitize(title))
+    .replace(/\{\{message\}\}/, DOMPurify.sanitize(message))
 }
 
 export interface NotifyOptions {

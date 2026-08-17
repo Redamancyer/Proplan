@@ -1,563 +1,328 @@
 import path from 'path'
-import fsPromises from 'fs/promises'
-import { exec } from 'child_process'
-import dayjs from 'dayjs'
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  ipcMain,
+  type MenuItemConstructorOptions
+} from 'electron'
 import log from 'electron-log'
-import { app, BrowserWindow, clipboard, dialog, nativeTheme, shell, ipcMain } from 'electron'
-import type { BrowserWindowConstructorOptions } from 'electron'
+import windowStateKeeper from 'electron-window-state'
 import type { IUserPreferences } from '@shared/types/preferences'
-import { isLinux, isOsx } from '../config'
-import { normalizeAndResolvePath } from '../filesystem'
-import { normalizeMarkdownPath } from '../filesystem/markdown'
-import { selectTheme } from '../menu/actions/theme'
+import { getThemeBackgroundColor } from '../../common/theme'
+import {
+  isOsx,
+  mainWindowOptions,
+  preferencesWindowOptions,
+  shouldUseNativeTitleBar,
+  TITLE_BAR_HEIGHT
+} from '../config'
 import registerSpellcheckerListeners from '../spellchecker'
-import { watchers } from '../utils/imagePathAutoComplement'
 import { onInternalChannel } from '../utils/internalIpc'
-import { WindowType } from '../windows/base'
-import EditorWindow from '../windows/editor'
-import SettingWindow from '../windows/setting'
 import { setLanguage } from '../i18n'
-import { getNativeThemeSource, isDarkApplicationTheme } from './nativeTheme'
+import { checkUpdates } from '../updates'
+import { getNativeThemeSource } from './nativeTheme'
 import type Accessor from './accessor'
-import type WindowManager from './windowManager'
-
-interface CliArgs {
-  _: string[]
-  [flag: string]: unknown
-}
-
-interface PathInfo {
-  isDir: boolean
-  path: string
-}
 
 class App {
-  private _accessor: Accessor
-  private _windowManager: WindowManager
-  private _themeListenerRegistered: boolean
+  private mainWindow: BrowserWindow | null = null
+  private settingsWindow: BrowserWindow | null = null
+  private allowMainClose = false
+  private themeListenerRegistered = false
+  private readonly applicationIcon = nativeImage.createFromPath(
+    app.isPackaged && isOsx
+      ? path.join(process.resourcesPath, 'icon.icns')
+      : path.join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'static', 'icon.png')
+  )
 
-  /**
-   * @param accessor The application accessor for application instances.
-   * @param args Parsed application arguments.
-   */
-  constructor(accessor: Accessor, _args: Partial<CliArgs>) {
-    this._accessor = accessor
-    this._windowManager = this._accessor.windowManager
-    // this.launchScreenshotWin = null // The window which call the screenshot.
-    // this.shortcutCapture = null
-
-    // Initialize main process language
-    this._initializeLanguage()
-    this._listenForIpcMain()
-    // Initialize theme listener
-    this._themeListenerRegistered = false
+  constructor(
+    private readonly accessor: Accessor,
+    _args: { _: string[] }
+  ) {
+    setLanguage(this.accessor.preferences.getItem<string>('language') || 'en')
+    this.listenForIpc()
   }
 
-  /**
-   * The entry point into the application.
-   */
   init(): void {
-    // Enable these features to use `backdrop-filter` css rules!
-    if (isOsx) {
-      app.commandLine.appendSwitch('enable-experimental-web-platform-features', 'true')
-    }
-
-    app.on('second-instance', () => {
-      const editor = this._windowManager.getWindowsByType(WindowType.EDITOR)[0]?.win
-      if (editor) editor.bringToFront()
-      else if (app.isReady()) this._createEditorWindow()
+    if (isOsx) app.commandLine.appendSwitch('enable-experimental-web-platform-features', 'true')
+    app.on('second-instance', () => this.focusMainWindow())
+    app.on('before-quit', () => {
+      this.allowMainClose = true
     })
-
     app.on('open-file', (event) => {
       event.preventDefault()
-      const editor = this._windowManager.getWindowsByType(WindowType.EDITOR)[0]?.win
-      if (editor) editor.bringToFront()
-      else if (app.isReady()) this._createEditorWindow()
+      this.focusMainWindow()
     })
-
-    app.on('ready', this.ready)
-
-    app.on('window-all-closed', () => {
-      // Close all the image path watcher
-      for (const watcher of watchers.values()) {
-        watcher.close()
-      }
-      this._windowManager.closeWatcher()
-      if (!isOsx) {
-        app.quit()
-      }
-    })
-
-    app.on('activate', () => {
-      // macOS only
-      // On OS X it's common to re-create a window in the app when the
-      // dock icon is clicked and there are no other windows open.
-      if (this._windowManager.getWindowsByType(WindowType.EDITOR).length === 0) {
-        this.ready()
-      }
-    })
-
-    // Prevent to load webview and opening links or new windows via HTML/JS.
+    app.on('ready', () => this.ready())
+    app.on('activate', () => this.focusMainWindow())
     app.on('web-contents-created', (_event, contents) => {
-      contents.on('will-attach-webview', (event) => {
+      contents.on('will-attach-webview', (event) => event.preventDefault())
+      contents.on('will-navigate', (event) => event.preventDefault())
+      contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      contents.on('before-input-event', (event, input) => {
+        const commandPressed = isOsx ? input.meta : input.control
+        if (!commandPressed || input.alt) return
+
+        const zoomOut = input.code === 'Minus' || input.code === 'NumpadSubtract' || input.key === '-'
+        const zoomIn =
+          input.code === 'Equal' || input.code === 'NumpadAdd' || input.key === '+' || input.key === '='
+        const resetZoom = input.code === 'Digit0' || input.code === 'Numpad0' || input.key === '0'
+        if (!zoomOut && !zoomIn && !resetZoom) return
+
         event.preventDefault()
-      })
-      contents.on('will-navigate', (event) => {
-        event.preventDefault()
-      })
-      contents.setWindowOpenHandler(() => {
-        return { action: 'deny' }
+        if (resetZoom) {
+          contents.setZoomLevel(0)
+          return
+        }
+        const delta = zoomIn ? 0.5 : -0.5
+        const nextLevel = Math.max(-3, Math.min(3, contents.getZoomLevel() + delta))
+        contents.setZoomLevel(nextLevel)
       })
     })
   }
 
-  /**
-   * Initialize main process language from preferences
-   */
-  private async _initializeLanguage(): Promise<void> {
-    try {
-      let currentLanguage = this._accessor.preferences.getItem<string>('language')
-
-      // If no language is set, auto-detect based on the system language
-      if (!currentLanguage) {
-        const systemLanguage = app.getLocale()
-        log.info(`System language detected: ${systemLanguage}`)
-
-        // Supported language list (based on languages actually supported by the project)
-        const supportedLanguages = [
-          'en',
-          'zh-CN',
-          'zh-TW',
-          'ja',
-          'ko',
-          'fr',
-          'de',
-          'es',
-          'pt',
-          'ru'
-        ]
-
-        // Language mapping: system language code -> application language code
-        const languageMap: Record<string, string> = {
-          'zh-CN': 'zh-CN',
-          'zh-TW': 'zh-TW',
-          'zh-HK': 'zh-TW',
-          zh: 'zh-CN',
-          en: 'en',
-          'en-US': 'en',
-          'en-GB': 'en',
-          ja: 'ja',
-          'ja-JP': 'ja',
-          ko: 'ko',
-          'ko-KR': 'ko',
-          fr: 'fr',
-          'fr-FR': 'fr',
-          de: 'de',
-          'de-DE': 'de',
-          es: 'es',
-          'es-ES': 'es',
-          pt: 'pt',
-          'pt-BR': 'pt',
-          ru: 'ru',
-          'ru-RU': 'ru'
-        }
-
-        currentLanguage = languageMap[systemLanguage] || 'en'
-
-        // If the detected language is not in the supported list, use English
-        if (!supportedLanguages.includes(currentLanguage)) {
-          currentLanguage = 'en'
-        }
-
-        // Save the detected language setting
-        this._accessor.preferences.setItem('language', currentLanguage)
-        log.info(`Auto-detected and set language to: ${currentLanguage}`)
-      }
-
-      setLanguage(currentLanguage)
-      log.info(`Main process language initialized to: ${currentLanguage}`)
-    } catch (error) {
-      log.error('Failed to initialize main process language:', error)
-      // If an error occurs, use English as the default language
-      setLanguage('en')
-    }
+  private ready(): void {
+    if (isOsx && app.dock && !this.applicationIcon.isEmpty()) app.dock.setIcon(this.applicationIcon)
+    nativeTheme.themeSource = getNativeThemeSource(this.accessor.preferences.getAll())
+    this.installApplicationMenu()
+    this.registerThemeListeners()
+    this.createMainWindow()
   }
 
-  async getScreenshotFileName(): Promise<string> {
-    const screenshotFolderPath = (await this._accessor.dataCenter.getItem(
-      'screenshotFolderPath'
-    )) as string
-    const fileName = `${dayjs().format('YYYY-MM-DD-HH-mm-ss')}-screenshot.png`
-    return path.join(screenshotFolderPath, fileName)
+  private rendererUrl(type: 'editor' | 'settings'): string {
+    const baseUrl =
+      process.env.NODE_ENV === 'development'
+        ? process.env.ELECTRON_RENDERER_URL!
+        : `file://${path.join(__dirname, '../renderer/index.html')}`
+    const url = new URL(baseUrl)
+    url.searchParams.set('type', type)
+    url.searchParams.set('debug', this.accessor.env.debug ? '1' : '0')
+    return url.toString()
   }
 
-  ready = (): void => {
-    const { preferences } = this._accessor
-
-    // Initialize language settings
-    const { theme, language } = preferences.getAll()
-    const followSystemTheme = preferences.getItem<boolean>('followSystemTheme')
-    const lightModeTheme = preferences.getItem<string>('lightModeTheme')
-    const darkModeTheme = preferences.getItem<string>('darkModeTheme')
-
-    if (language) {
-      setLanguage(language)
+  private windowOptions(
+    base: Readonly<Electron.BrowserWindowConstructorOptions>
+  ): Electron.BrowserWindowConstructorOptions {
+    const options: Electron.BrowserWindowConstructorOptions = {
+      ...base,
+      icon: this.applicationIcon.isEmpty() ? undefined : this.applicationIcon,
+      backgroundColor: getThemeBackgroundColor(this.accessor.preferences.getItem('theme'))
     }
-
-    nativeTheme.themeSource = getNativeThemeSource({ followSystemTheme, theme })
-
-    // Apply theme at startup if "Follow system theme" is enabled
-    const isDarkTheme = isDarkApplicationTheme(theme)
-    const systemIsDark = nativeTheme.shouldUseDarkColors
-
-    if (followSystemTheme && isDarkTheme !== systemIsDark) {
-      const newTheme = systemIsDark ? darkModeTheme : lightModeTheme
-      log.info(
-        `Following system theme at startup: ${newTheme} (system ${systemIsDark ? 'dark' : 'light'})`
-      )
-      selectTheme(newTheme)
+    if (!isOsx && shouldUseNativeTitleBar(this.accessor.preferences.getItem('titleBarStyle'))) {
+      options.frame = true
+      options.titleBarStyle = 'default'
     }
-
-    onInternalChannel(
-      'broadcast-preferences-changed',
-      (change: Partial<IUserPreferences>) => {
-        const nextPreferences = {
-          ...preferences.getAll(),
-          ...change
-        }
-        nativeTheme.themeSource = getNativeThemeSource(nextPreferences)
-
-      // When followSystemTheme is enabled, immediately switch to match system
-        if (change.followSystemTheme === true) {
-          const systemIsDark = nativeTheme.shouldUseDarkColors
-          const lightModeTheme = preferences.getItem<string>('lightModeTheme')
-          const darkModeTheme = preferences.getItem<string>('darkModeTheme')
-          const newTheme = systemIsDark ? darkModeTheme : lightModeTheme
-
-          log.info(
-            `followSystemTheme enabled, switching to: ${newTheme} (system ${systemIsDark ? 'dark' : 'light'})`
-          )
-          selectTheme(newTheme)
-          preferences.setItem('theme', newTheme)
-        }
-      // When light/dark mode theme preferences change, apply immediately if following system
-        if (
-          preferences.getItem<boolean>('followSystemTheme') &&
-        (change.lightModeTheme || change.darkModeTheme)
-        ) {
-          const systemIsDark = nativeTheme.shouldUseDarkColors
-
-        // Get current values, but prefer the NEW values from the change event
-          let lightModeTheme = preferences.getItem<string>('lightModeTheme')
-          let darkModeTheme = preferences.getItem<string>('darkModeTheme')
-
-        // If these preferences were just changed, use the new values from the change object
-          if (change.lightModeTheme !== undefined) {
-            lightModeTheme = change.lightModeTheme
-          }
-          if (change.darkModeTheme !== undefined) {
-            darkModeTheme = change.darkModeTheme
-          }
-
-          const newTheme = systemIsDark ? darkModeTheme : lightModeTheme
-
-          log.info(`Theme preference changed, applying: ${newTheme}`)
-          selectTheme(newTheme)
-          preferences.setItem('theme', newTheme)
-        }
-      })
-
-    // Listen for system theme changes and auto-switch if enabled
-    if (!this._themeListenerRegistered) {
-      nativeTheme.on('updated', () => {
-        const followSystemTheme = preferences.getItem<boolean>('followSystemTheme')
-        const lightModeTheme = preferences.getItem<string>('lightModeTheme')
-        const darkModeTheme = preferences.getItem<string>('darkModeTheme')
-
-        if (followSystemTheme) {
-          const systemIsDark = nativeTheme.shouldUseDarkColors
-          const newTheme = systemIsDark ? darkModeTheme : lightModeTheme
-          const currentTheme = preferences.getItem<string>('theme')
-
-          // Only switch if the theme actually needs to change
-          if (newTheme !== currentTheme) {
-            log.info(
-              `System theme changed, switching to: ${newTheme} (system ${systemIsDark ? 'dark' : 'light'})`
-            )
-            selectTheme(newTheme)
-            preferences.setItem('theme', newTheme)
-          }
-        }
-      })
-      this._themeListenerRegistered = true
-    }
-
-    const createWindow = (): void => {
-      this._createEditorWindow()
-    }
-
-    if (isLinux) {
-      let windowCreated = false
-
-      const createWindowOnce = (): void => {
-        if (windowCreated) return
-        windowCreated = true
-        createWindow()
-      }
-
-      // Wait for theme to settle (Linux-specific issue?)
-      nativeTheme.once('updated', createWindowOnce)
-      // Fallback timeout in case 'updated' never fires (no theme change)
-      setTimeout(createWindowOnce, 150)
-    } else {
-      // Create immediately on Windows/macOS
-      createWindow()
-    }
-
-    // this.shortcutCapture = new ShortcutCapture()
-    // if (process.env.NODE_ENV === 'development') {
-    //   this.shortcutCapture.dirname = path.resolve(path.join(__dirname, '../../../node_modules/shortcut-capture'))
-    // }
-    // this.shortcutCapture.on('capture', async ({ dataURL }) => {
-    //   const { screenshotFileName } = this
-    //   const image = nativeImage.createFromDataURL(dataURL)
-    //   const bufferImage = image.toPNG()
-
-    //   if (this.launchScreenshotWin) {
-    //     this.launchScreenshotWin.webContents.send('mt::screenshot-captured')
-    //     this.launchScreenshotWin = null
-    //   }
-
-    //   try {
-    //     // write screenshot image into screenshot folder.
-    //     await fse.writeFile(screenshotFileName, bufferImage)
-    //   } catch (err) {
-    //     log.error(err)
-    //   }
-    // })
+    return options
   }
 
-  // --- private --------------------------------
-
-  /**
-   * Creates a new editor window.
-   */
-  private _createEditorWindow(
-    rootDirectory: string | null = null,
-    fileList: string[] = [],
-    markdownList: string[] = [],
-    options: Partial<BrowserWindowConstructorOptions> = {},
-    bufferStoreInfo: { id: string; filePath: string | null } | null = null
-  ): EditorWindow {
-    const existing = this._windowManager.getWindowsByType(WindowType.EDITOR)[0]?.win as
-      | EditorWindow
-      | undefined
-    if (existing) {
-      existing.bringToFront()
-      return existing
-    }
-    const editor = new EditorWindow(this._accessor)
-    if (rootDirectory) {
-      this._accessor.preferences.setItems({ lastOpenedFolder: rootDirectory })
-    }
-    editor.createWindow(rootDirectory, fileList, markdownList, options, bufferStoreInfo)
-    this._windowManager.add(editor)
-    if (this._windowManager.windowCount === 1 && editor.id !== null) {
-      this._accessor.menu.setActiveWindow(editor.id)
-    }
-    return editor
-  }
-
-  /**
-   * Create a new setting window.
-   */
-  private _createSettingWindow(category?: string | null): void {
-    const setting = new SettingWindow(this._accessor)
-    setting.createWindow(category ?? null)
-    this._windowManager.add(setting)
-    if (this._windowManager.windowCount === 1 && setting.id !== null) {
-      this._accessor.menu.setActiveWindow(setting.id)
-    }
-  }
-
-  private _openSettingsWindow(category?: string | null): void {
-    const settingWins = this._windowManager.getWindowsByType(WindowType.SETTINGS)
-    const browserSettingWindow = settingWins[0]?.win.browserWindow
-    if (browserSettingWindow) {
-      // A setting window is already created
-      browserSettingWindow.webContents.send('settings::change-tab', category)
-      if (isLinux) {
-        browserSettingWindow.focus()
-      } else {
-        browserSettingWindow.moveTop()
-      }
+  private createMainWindow(): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.focusMainWindow()
       return
     }
-    this._createSettingWindow(category)
+    const state = windowStateKeeper({ defaultWidth: 1200, defaultHeight: 800 })
+    const window = new BrowserWindow({
+      ...this.windowOptions(mainWindowOptions),
+      x: state.x,
+      y: state.y,
+      width: state.width,
+      height: state.height
+    })
+    this.mainWindow = window
+    this.allowMainClose = false
+    state.manage(window)
+    window.setSheetOffset(TITLE_BAR_HEIGHT)
+    window.on('close', (event) => {
+      if (this.allowMainClose) return
+      event.preventDefault()
+      window.webContents.send('mt::ask-for-close')
+    })
+    window.on('closed', () => {
+      this.mainWindow = null
+      this.allowMainClose = false
+    })
+    window.webContents.on('render-process-gone', (_event, details) => {
+      log.error(`Main renderer exited: ${details.reason} (${details.exitCode})`)
+    })
+    window.loadURL(this.rendererUrl('editor'))
   }
 
-  private _listenForIpcMain(): void {
+  private openSettings(category?: string): void {
+    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      this.settingsWindow.webContents.send('settings::change-tab', category)
+      this.settingsWindow.show()
+      this.settingsWindow.focus()
+      return
+    }
+    const window = new BrowserWindow(this.windowOptions(preferencesWindowOptions))
+    this.settingsWindow = window
+    window.setSheetOffset(TITLE_BAR_HEIGHT)
+    window.on('closed', () => {
+      this.settingsWindow = null
+    })
+    window.loadURL(this.rendererUrl('settings'))
+  }
+
+  private focusMainWindow(): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+      if (app.isReady()) this.createMainWindow()
+      return
+    }
+    if (this.mainWindow.isMinimized()) this.mainWindow.restore()
+    this.mainWindow.show()
+    this.mainWindow.focus()
+  }
+
+  private registerThemeListeners(): void {
+    if (this.themeListenerRegistered) return
+    onInternalChannel('broadcast-preferences-changed', (change: Partial<IUserPreferences>) => {
+      const preferences = this.accessor.preferences
+      nativeTheme.themeSource = getNativeThemeSource({ ...preferences.getAll(), ...change })
+      if (change.language) setLanguage(change.language)
+      this.applySystemTheme()
+    })
+    nativeTheme.on('updated', () => this.applySystemTheme())
+    this.themeListenerRegistered = true
+  }
+
+  private applySystemTheme(): void {
+    const preferences = this.accessor.preferences
+    if (!preferences.getItem<boolean>('followSystemTheme')) return
+    const theme = nativeTheme.shouldUseDarkColors
+      ? preferences.getItem<string>('darkModeTheme')
+      : preferences.getItem<string>('lightModeTheme')
+    if (theme && theme !== preferences.getItem('theme')) preferences.setItem('theme', theme)
+  }
+
+  private listenForIpc(): void {
     registerSpellcheckerListeners()
-
-    // Handle language setting requests
     ipcMain.on('mt::get-current-language', (event) => {
-      const { language } = this._accessor.preferences.getAll()
-      event.reply('mt::current-language', language || 'en')
+      event.reply('mt::current-language', this.accessor.preferences.getItem('language') || 'en')
     })
-
-    ipcMain.on('app-create-editor-window', () => {
-      this._createEditorWindow()
+    ipcMain.on('mt::open-setting-window', (_event, category?: string) => this.openSettings(category))
+    onInternalChannel('app-create-settings-window', (category?: string) => this.openSettings(category))
+    ipcMain.on('mt::close-window', (event) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (!window) return
+      if (window === this.mainWindow) this.allowMainClose = true
+      window.close()
     })
+    ipcMain.on('mt::check-for-update', (event) => {
+      checkUpdates(BrowserWindow.fromWebContents(event.sender))
+    })
+  }
 
-    onInternalChannel('screen-capture', async(win: BrowserWindow) => {
-      if (isOsx) {
-        // Use macOs `screencapture` command line when in macOs system.
-        const screenshotFileName = await this.getScreenshotFileName()
-        exec('screencapture -i -c', async(err) => {
-          if (err) {
-            log.error(err)
-            return
-          }
-          // The renderer can no longer paste the clipboard bitmap via the
-          // removed `document.execCommand('paste')`, so persist the capture to a
-          // PNG and hand the path to the renderer to insert at the cursor.
-          let savedPath = ''
-          try {
-            const image = clipboard.readImage()
-            // `screencapture` leaves the clipboard untouched when the user
-            // cancels (Esc); skip so we don't insert a stale/empty image.
-            if (!image.isEmpty()) {
-              const bufferImage = image.toPNG()
-              await fsPromises.writeFile(screenshotFileName, bufferImage)
-              savedPath = screenshotFileName
-            }
-          } catch (writeErr) {
-            log.error(writeErr)
-          }
-          win.webContents.send('mt::screenshot-captured', savedPath)
-        })
-      } else {
-        // TODO: Do nothing, maybe we'll add screenCapture later on Linux and Windows.
-        // if (this.shortcutCapture) {
-        //   this.launchScreenshotWin = win
-        //   this.shortcutCapture.shortcutCapture()
-        // }
+  private installApplicationMenu(): void {
+    const showAbout = (): void => this.mainWindow?.webContents.send('mt::about-dialog')
+    const setZoom = (window: Electron.BaseWindow | undefined, delta?: number): void => {
+      const contents =
+        window instanceof BrowserWindow ? window.webContents : this.mainWindow?.webContents
+      if (!contents) return
+      const nextLevel = delta === undefined ? 0 : contents.getZoomLevel() + delta
+      contents.setZoomLevel(Math.max(-3, Math.min(3, nextLevel)))
+    }
+    const sendEditorCommand = (
+      window: Electron.BaseWindow | undefined,
+      command: 'undo' | 'redo'
+    ): void => {
+      const contents =
+        window instanceof BrowserWindow ? window.webContents : this.mainWindow?.webContents
+      if (!contents) return
+      if (contents === this.settingsWindow?.webContents) {
+        if (command === 'undo') contents.undo()
+        else contents.redo()
+        return
       }
-    })
-
-    onInternalChannel('app-create-settings-window', (category?: string) => {
-      this._openSettingsWindow(category)
-    })
-
-    onInternalChannel('app-open-file-by-id', (windowId: number, filePath: string) => {
-      const openFilesInNewWindow = this._accessor.preferences.getItem<boolean>('openFilesInNewWindow')
-      if (openFilesInNewWindow) {
-        this._createEditorWindow(null, [filePath])
-      } else {
-        const editor = this._windowManager.get(windowId) as EditorWindow | undefined
-        if (editor) {
-          editor.openTab(filePath, {}, true)
-        }
-      }
-    })
-    onInternalChannel('app-open-files-by-id', (windowId: number, fileList: string[]) => {
-      const openFilesInNewWindow = this._accessor.preferences.getItem<boolean>('openFilesInNewWindow')
-      if (openFilesInNewWindow) {
-        this._createEditorWindow(null, fileList)
-      } else {
-        const editor = this._windowManager.get(windowId) as EditorWindow | undefined
-        if (editor) {
-          editor.openTabsFromPaths(
-            fileList
-              .map((p) => normalizeMarkdownPath(p))
-              .filter((i): i is PathInfo => i !== null && !i.isDir)
-              .map((i) => i.path)
-          )
-        }
-      }
-    })
-
-    onInternalChannel('app-open-markdown-by-id', (windowId: number, data: string) => {
-      const openFilesInNewWindow = this._accessor.preferences.getItem<boolean>('openFilesInNewWindow')
-      if (openFilesInNewWindow) {
-        this._createEditorWindow(null, [], [data])
-      } else {
-        const editor = this._windowManager.get(windowId) as EditorWindow | undefined
-        if (editor) {
-          editor.openUntitledTab(true, data)
-        }
-      }
-    })
-
-    onInternalChannel(
-      'app-open-directory-by-id',
-      (windowId: number, pathname: string, openInSameWindow: boolean) => {
-        const { openFolderInNewWindow } = this._accessor.preferences.getAll()
-        if (openInSameWindow || !openFolderInNewWindow) {
-          const editor = this._windowManager.get(windowId) as EditorWindow | undefined
-          if (editor) {
-            editor.openFolder(pathname)
-            return
-          }
-        }
-        this._createEditorWindow(pathname)
-      }
-    )
-
-    // --- renderer -------------------
-
-    ipcMain.on('mt::app-try-quit', () => {
-      app.quit()
-    })
-
-    ipcMain.on('mt::open-file-by-window-id', (_e, windowId: number, filePath: string) => {
-      const resolvedPath = normalizeAndResolvePath(filePath)
-      const openFilesInNewWindow = this._accessor.preferences.getItem<boolean>('openFilesInNewWindow')
-      if (openFilesInNewWindow) {
-        this._createEditorWindow(null, [resolvedPath])
-      } else {
-        const editor = this._windowManager.get(windowId) as EditorWindow | undefined
-        if (editor) {
-          editor.openTab(resolvedPath, {}, true)
-        }
-      }
-    })
-
-    ipcMain.on('mt::select-default-directory-to-open', async(e) => {
-      const { preferences } = this._accessor
-      const { defaultDirectoryToOpen } = preferences.getAll()
-      const win = BrowserWindow.fromWebContents(e.sender)
-      if (!win) return
-
-      const { filePaths } = await dialog.showOpenDialog(win, {
-        defaultPath: defaultDirectoryToOpen,
-        properties: ['openDirectory', 'createDirectory']
+      contents.send('mt::proplan::editor-command', command)
+    }
+    const template: MenuItemConstructorOptions[] = []
+    if (isOsx) {
+      template.push({
+        label: app.name,
+        submenu: [
+          { label: `关于 ${app.name}`, click: showAbout },
+          { type: 'separator' },
+          { label: '偏好设置…', accelerator: 'CmdOrCtrl+,', click: () => this.openSettings() },
+          { label: '检查更新…', click: () => checkUpdates(this.mainWindow) },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
       })
-      if (filePaths && filePaths[0]) {
-        preferences.setItems({ defaultDirectoryToOpen: filePaths[0] })
-      }
-    })
-
-    ipcMain.on('mt::open-setting-window', () => {
-      this._openSettingsWindow()
-    })
-
-    ipcMain.on('mt::make-screenshot', (e) => {
-      const win = BrowserWindow.fromWebContents(e.sender)
-      ipcMain.emit('screen-capture', win)
-    })
-
-    ipcMain.on('mt::request-keybindings', (e) => {
-      const win = BrowserWindow.fromWebContents(e.sender)
-      if (!win) return
-      const { keybindings } = this._accessor
-      // Convert map to object
-      win.webContents.send('mt::keybindings-response', Object.fromEntries(keybindings.keys))
-    })
-
-    ipcMain.handle('mt::fs-trash-item', async(_event, fullPath: string) => {
-      return shell.trashItem(fullPath)
-    })
+    }
+    template.push(
+      {
+        label: '编辑',
+        submenu: [
+          {
+            label: '撤销',
+            accelerator: 'CmdOrCtrl+Z',
+            click: (_item, window) => sendEditorCommand(window, 'undo')
+          },
+          {
+            label: '重做',
+            accelerator: isOsx ? 'Shift+CmdOrCtrl+Z' : 'CmdOrCtrl+Y',
+            click: (_item, window) => sendEditorCommand(window, 'redo')
+          },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' }
+        ]
+      },
+      {
+        label: '显示',
+        submenu: [
+          { role: 'reload' },
+          { role: 'toggleDevTools', visible: !app.isPackaged },
+          { type: 'separator' },
+          {
+            label: '实际大小',
+            accelerator: 'CmdOrCtrl+0',
+            click: (_item, window) => setZoom(window)
+          },
+          {
+            label: '放大',
+            accelerator: 'CmdOrCtrl+Plus',
+            click: (_item, window) => setZoom(window, 0.5)
+          },
+          {
+            label: '缩小',
+            accelerator: 'CmdOrCtrl+-',
+            click: (_item, window) => setZoom(window, -0.5)
+          },
+          { type: 'separator' },
+          { role: 'togglefullscreen' }
+        ]
+      },
+      { label: '窗口', role: 'windowMenu' }
+    )
+    if (!isOsx) {
+      template.unshift({
+        label: '文件',
+        submenu: [
+          { label: '设置', accelerator: 'CmdOrCtrl+,', click: () => this.openSettings() },
+          { type: 'separator' },
+          { role: 'quit' }
+        ]
+      })
+      template.push({
+        label: '帮助',
+        submenu: [
+          { label: '检查更新…', click: () => checkUpdates(this.mainWindow) },
+          { label: `关于 ${app.name}`, click: showAbout }
+        ]
+      })
+    }
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
   }
 }
 

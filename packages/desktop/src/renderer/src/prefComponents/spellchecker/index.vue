@@ -91,7 +91,6 @@ import { storeToRefs } from 'pinia'
 import Compound from '../common/compound/index.vue'
 import CurSelect from '../common/select/index.vue'
 import Bool from '../common/bool/index.vue'
-import { isOsx as checkIsOsx } from '@/util'
 import { SpellChecker } from '@/spellchecker'
 import { getLanguageName } from '@/spellchecker/languageMap'
 import notice from '@/services/notification'
@@ -104,7 +103,7 @@ interface CustomDictionaryWord {
 }
 
 const { t } = useI18n()
-const isOsx = checkIsOsx
+const isOsx = window.electron.process.platform === 'darwin'
 const availableDictionaries = ref<PrefSelectOption<string>[]>([])
 const wordsInCustomDictionary = ref<CustomDictionaryWord[]>([])
 

@@ -1,1 +1,5 @@
-export * from './types'
+export * from './types/ipc'
+export * from './types/licenses'
+export * from './types/preferences'
+export * from './types/proplan'
+export * from './types/typedEmitter'

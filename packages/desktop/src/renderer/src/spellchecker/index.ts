@@ -1,4 +1,4 @@
-import { isOsx } from '@/util'
+const isOsx = window.electron.process.platform === 'darwin'
 
 /**
  * High level spell checker API based on Chromium built-in spell checker.

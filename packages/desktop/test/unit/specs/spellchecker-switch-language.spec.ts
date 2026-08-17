@@ -1,16 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest'
 
-// The renderer SpellChecker reads `isOsx` from `@/util` (a top-level import
-// binding) and reaches Electron through `window.electron.ipcRenderer.invoke`.
-// We mock `@/util` per test to flip the platform branch, and stub the
-// contextBridge `window.electron` surface the class touches.
 const win = window as unknown as {
-  electron?: { ipcRenderer: { invoke: Mock } }
+  electron?: { process: { platform: NodeJS.Platform }; ipcRenderer: { invoke: Mock } }
 }
 
 const loadSpellChecker = async(isOsx: boolean) => {
   vi.resetModules()
-  vi.doMock('@/util', () => ({ isOsx }))
+  win.electron!.process.platform = isOsx ? 'darwin' : 'linux'
   return (await import('../../../src/renderer/src/spellchecker/index')).SpellChecker
 }
 
@@ -19,12 +15,11 @@ describe('renderer SpellChecker.switchLanguage', () => {
 
   beforeEach(() => {
     invoke = vi.fn(() => Promise.resolve(true))
-    win.electron = { ipcRenderer: { invoke } }
+    win.electron = { process: { platform: 'linux' }, ipcRenderer: { invoke } }
   })
 
   afterEach(() => {
     delete win.electron
-    vi.doUnmock('@/util')
   })
 
   it('invokes the IPC channel once and records the new language (non-macOS, enabled)', async() => {

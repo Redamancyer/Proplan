@@ -12,13 +12,6 @@ import type { IUserPreferences } from '@shared/types/preferences'
 import schema from './schema.json'
 
 const PREFERENCES_FILE_NAME = 'preferences'
-const MANAGED_IMAGE_PREFERENCES = {
-  imageInsertAction: 'folder',
-  imagePreferRelativeDirectory: false,
-  imageRelativeDirectoryBase: 'file',
-  imageRelativeDirectoryName: 'proplan-assets'
-} as const
-
 // The Preference class extends EventEmitter but does not currently emit any
 // events itself — keep the event map empty until concrete events are added.
 type PreferenceEvents = Record<string, unknown[]>
@@ -51,13 +44,6 @@ class Preference extends TypedEmitter<PreferenceEvents> {
     this.store = new Store<IUserPreferences>({
       schema: schema as unknown as Schema<IUserPreferences>,
       name: PREFERENCES_FILE_NAME,
-      migrations: {
-        '0.18.6': (store) => {
-          if (store.get('startUpAction') === 'lastState') {
-            store.set('startUpAction', 'openLastFolder')
-          }
-        }
-      },
       beforeEachMigration: (_store, context) => {
         log.info(`Preferences migration: ${context.fromVersion} -> ${context.toVersion}`)
       }
@@ -131,7 +117,6 @@ class Preference extends TypedEmitter<PreferenceEvents> {
       }
     }
 
-    this.store.set(MANAGED_IMAGE_PREFERENCES)
     if (isWindows) {
       this.store.set('titleBarStyle', 'native')
     }
@@ -144,9 +129,6 @@ class Preference extends TypedEmitter<PreferenceEvents> {
   }
 
   setItem(key: string, value: unknown): void {
-    if (Object.prototype.hasOwnProperty.call(MANAGED_IMAGE_PREFERENCES, key)) {
-      value = MANAGED_IMAGE_PREFERENCES[key as keyof typeof MANAGED_IMAGE_PREFERENCES]
-    }
     if (isWindows && key === 'titleBarStyle') {
       value = 'native'
     }
@@ -174,22 +156,6 @@ class Preference extends TypedEmitter<PreferenceEvents> {
     })
   }
 
-  getPreferredEol(): 'lf' | 'crlf' {
-    const endOfLine = this.getItem<string>('endOfLine')
-    if (endOfLine === 'lf') {
-      return 'lf'
-    }
-    return endOfLine === 'crlf' || isWindows ? 'crlf' : 'lf'
-  }
-
-  exportJSON(): void {
-    // todo
-  }
-
-  importJSON(): void {
-    // todo
-  }
-
   _listenForIpcMain(): void {
     ipcMain.on('mt::ask-for-user-preference', (e) => {
       const win = BrowserWindow.fromWebContents(e.sender)
@@ -200,10 +166,6 @@ class Preference extends TypedEmitter<PreferenceEvents> {
     ipcMain.on('mt::set-user-preference', (_e, settings: Record<string, unknown>) => {
       this.setItems(settings)
     })
-    ipcMain.on('mt::cmd-toggle-autosave', () => {
-      this.setItem('autoSave', !this.getItem('autoSave'))
-    })
-
     onInternalChannel('set-user-preference', (settings: Record<string, unknown>) => {
       this.setItems(settings)
     })

@@ -3,6 +3,7 @@
     ref="host"
     class="proplan-editor-host"
     :dir="textDirection"
+    @keydown.capture="handleEditorKeydown"
   />
 </template>
 
@@ -133,6 +134,29 @@ const preferenceOptions = computed(getPreferenceOptions)
 
 const host = ref<HTMLElement | null>(null)
 let editor: InstanceType<typeof Muya> | null = null
+let removeEditorCommandListener: (() => void) | null = null
+
+const runEditorCommand = (command: 'undo' | 'redo'): void => {
+  if (!editor) return
+  if (!host.value?.contains(document.activeElement)) {
+    document.execCommand(command)
+    return
+  }
+  if (command === 'undo') editor.undo()
+  else editor.redo()
+}
+
+const handleEditorKeydown = (event: KeyboardEvent): void => {
+  const commandPressed = window.electron.process.platform === 'darwin' ? event.metaKey : event.ctrlKey
+  if (!commandPressed || event.altKey) return
+  const key = event.key.toLowerCase()
+  const undo = key === 'z' && !event.shiftKey
+  const redo = (key === 'z' && event.shiftKey) || key === 'y'
+  if (!undo && !redo) return
+  event.preventDefault()
+  event.stopPropagation()
+  runEditorCommand(undo ? 'undo' : 'redo')
+}
 
 const renderOptionKeys = new Set<keyof EditorPreferenceOptions>([
   'codeBlockLineNumbers',
@@ -224,12 +248,18 @@ onMounted(() => {
     })
   )
   editor.init()
+  removeEditorCommandListener = window.electron.ipcRenderer.on(
+    'mt::proplan::editor-command',
+    (_event, command) => runEditorCommand(command)
+  )
   editor.on('json-change', () => {
     if (editor) emit('update:modelValue', editor.getMarkdown())
   })
 })
 
 onBeforeUnmount(() => {
+  removeEditorCommandListener?.()
+  removeEditorCommandListener = null
   editor?.destroy()
   editor = null
 })

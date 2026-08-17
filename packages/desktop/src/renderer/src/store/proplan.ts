@@ -14,6 +14,7 @@ import {
 export type ProplanView = ProplanSection | 'globalTasks'
 export type ProplanRecord = ProplanMemo | ProplanTask | ProplanTimelineEntry
 export type GlobalTaskFilter = 'all' | 'today'
+export type ProplanSaveKind = 'auto' | 'manual'
 
 export interface GlobalTaskItem {
   projectId: string
@@ -37,6 +38,23 @@ const localDateKey = (date = new Date()): string => {
 
 const cloneDatabase = (database: ProplanDatabase): ProplanDatabase =>
   JSON.parse(JSON.stringify(toRaw(database))) as ProplanDatabase
+const databaseSnapshot = (database: ProplanDatabase): string => JSON.stringify(toRaw(database))
+
+const sortTimeline = (project: ProplanProject): void => {
+  project.timeline.sort((a, b) => {
+    const aTime = Date.parse(a.occurredAt)
+    const bTime = Date.parse(b.occurredAt)
+    if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) return bTime - aTime
+    return b.occurredAt.localeCompare(a.occurredAt)
+  })
+}
+
+const moveBefore = <T>(items: T[], sourceIndex: number, targetIndex: number): void => {
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return
+  const [item] = items.splice(sourceIndex, 1)
+  if (item === undefined) return
+  items.splice(targetIndex, 0, item)
+}
 
 export const useProplanStore = defineStore('proplan', () => {
   const preferences = usePreferencesStore()
@@ -44,19 +62,23 @@ export const useProplanStore = defineStore('proplan', () => {
   const loaded = ref(false)
   const saving = ref(false)
   const saveError = ref('')
+  const lastSavedAt = ref<Date | null>(null)
+  const lastSaveKind = ref<ProplanSaveKind | null>(null)
   const currentDateKey = ref(localDateKey())
   const selectedProjectId = ref<string | null>(null)
   const selectedRecordId = ref<string | null>(null)
   const view = ref<ProplanView>('memos')
   const globalTaskFilter = ref<GlobalTaskFilter>('all')
   let saveTimer: ReturnType<typeof setTimeout> | null = null
+  const lastSavedSnapshot = ref('')
 
   const projects = computed(() => database.value.projects)
   const selectedProject = computed(
     () => projects.value.find((project) => project.id === selectedProjectId.value) ?? null
   )
-  const allGlobalTasks = computed<GlobalTaskItem[]>(() =>
-    projects.value
+  const allGlobalTasks = computed<GlobalTaskItem[]>(() => {
+    const positions = new Map(database.value.globalTaskOrder.map((id, index) => [id, index]))
+    return projects.value
       .flatMap((project) =>
         project.tasks.map((task) => ({
           projectId: project.id,
@@ -65,14 +87,12 @@ export const useProplanStore = defineStore('proplan', () => {
           task
         }))
       )
-      .sort((a, b) => {
-        if (a.task.completed !== b.task.completed) return a.task.completed ? 1 : -1
-        if (a.task.dueAt && b.task.dueAt) return a.task.dueAt.localeCompare(b.task.dueAt)
-        if (a.task.dueAt) return -1
-        if (b.task.dueAt) return 1
-        return b.task.updatedAt.localeCompare(a.task.updatedAt)
-      })
-  )
+      .sort(
+        (a, b) =>
+          (positions.get(a.task.id) ?? Number.MAX_SAFE_INTEGER) -
+          (positions.get(b.task.id) ?? Number.MAX_SAFE_INTEGER)
+      )
+  })
   const globalTasks = computed<GlobalTaskItem[]>(() =>
     allGlobalTasks.value.filter(({ task }) => !task.completed)
   )
@@ -100,17 +120,26 @@ export const useProplanStore = defineStore('proplan', () => {
     const item = globalTasks.value.find(({ task }) => task.id === selectedRecordId.value)
     return projects.value.find((project) => project.id === item?.projectId) ?? null
   })
+  const hasUnsavedChanges = computed(
+    () => loaded.value && databaseSnapshot(database.value) !== lastSavedSnapshot.value
+  )
 
-  const flushSave = async(): Promise<void> => {
-    if (!loaded.value) return
+  const flushSave = async(kind: ProplanSaveKind = 'auto'): Promise<boolean> => {
+    if (!loaded.value) return false
     if (saveTimer) {
       clearTimeout(saveTimer)
       saveTimer = null
     }
+    const snapshot = databaseSnapshot(database.value)
+    if (kind === 'auto' && snapshot === lastSavedSnapshot.value) return false
     saving.value = true
     saveError.value = ''
     try {
       await window.proplan.save(cloneDatabase(database.value))
+      lastSavedSnapshot.value = snapshot
+      lastSavedAt.value = new Date()
+      lastSaveKind.value = kind
+      return true
     } catch (error) {
       saveError.value = error instanceof Error ? error.message : String(error)
       throw error
@@ -127,7 +156,7 @@ export const useProplanStore = defineStore('proplan', () => {
       return
     }
     saveTimer = setTimeout(() => {
-      flushSave().catch(() => undefined)
+      flushSave('auto').catch(() => undefined)
     }, Math.max(1000, preferences.autoSaveDelay))
   }
 
@@ -139,6 +168,8 @@ export const useProplanStore = defineStore('proplan', () => {
   const initialize = async(): Promise<void> => {
     if (loaded.value) return
     database.value = await window.proplan.load()
+    database.value.projects.forEach(sortTimeline)
+    lastSavedSnapshot.value = databaseSnapshot(database.value)
     selectedProjectId.value = database.value.projects[0]?.id ?? null
     selectedRecordId.value = null
     loaded.value = true
@@ -150,6 +181,8 @@ export const useProplanStore = defineStore('proplan', () => {
       saveTimer = null
     }
     database.value = await window.proplan.load()
+    database.value.projects.forEach(sortTimeline)
+    lastSavedSnapshot.value = databaseSnapshot(database.value)
     selectedProjectId.value = database.value.projects[0]?.id ?? null
     selectedRecordId.value = null
     view.value = 'memos'
@@ -220,6 +253,10 @@ export const useProplanStore = defineStore('proplan', () => {
   ): void => {
     const project = projects.value.find((item) => item.id === projectId)
     if (!project) return
+    const changed = Object.entries(patch).some(
+      ([key, value]) => project[key as keyof typeof patch] !== value
+    )
+    if (!changed) return
     Object.assign(project, patch)
     touchProject(project)
   }
@@ -227,7 +264,13 @@ export const useProplanStore = defineStore('proplan', () => {
   const deleteProject = (projectId: string): void => {
     const index = projects.value.findIndex((project) => project.id === projectId)
     if (index < 0) return
-    database.value.projects.splice(index, 1)
+    const [removed] = database.value.projects.splice(index, 1)
+    if (removed) {
+      const removedTaskIds = new Set(removed.tasks.map((task) => task.id))
+      database.value.globalTaskOrder = database.value.globalTaskOrder.filter(
+        (taskId) => !removedTaskIds.has(taskId)
+      )
+    }
     if (selectedProjectId.value === projectId) {
       const next = projects.value[Math.min(index, projects.value.length - 1)] ?? null
       selectedProjectId.value = next?.id ?? null
@@ -254,9 +297,11 @@ export const useProplanStore = defineStore('proplan', () => {
         completedAt: null
       }
       project.tasks.unshift(record)
+      database.value.globalTaskOrder.unshift(record.id)
     } else if (section === 'timeline') {
       record = { ...base, title: '新时间节点', occurredAt: timestamp }
       project.timeline.unshift(record)
+      sortTimeline(project)
     } else {
       record = { ...base, title: '新备忘' }
       project.memos.unshift(record)
@@ -273,8 +318,57 @@ export const useProplanStore = defineStore('proplan', () => {
     const record = selectedRecord.value
     const project = selectedRecordProject.value
     if (!record || !project) return
+    const recordValues = record as unknown as Readonly<Record<string, unknown>>
+    const changed = Object.entries(patch).some(
+      ([key, value]) => recordValues[key] !== value
+    )
+    if (!changed) return
     Object.assign(record, patch, { updatedAt: now() })
+    if (isTimelineRecord(record)) sortTimeline(project)
     touchProject(project)
+  }
+
+  const isTimelineRecord = (record: ProplanRecord): record is ProplanTimelineEntry =>
+    'occurredAt' in record
+
+  const reorderProjects = (sourceId: string, targetId: string): void => {
+    moveBefore(
+      database.value.projects,
+      database.value.projects.findIndex((project) => project.id === sourceId),
+      database.value.projects.findIndex((project) => project.id === targetId)
+    )
+    scheduleSave()
+  }
+
+  const reorderRecords = (sourceId: string, targetId: string): void => {
+    const project = selectedProject.value
+    if (!project || (view.value !== 'memos' && view.value !== 'tasks')) return
+    const list = project[view.value]
+    moveBefore(
+      list,
+      list.findIndex((record) => record.id === sourceId),
+      list.findIndex((record) => record.id === targetId)
+    )
+    touchProject(project)
+  }
+
+  const reorderGlobalTasks = (sourceId: string, targetId: string): void => {
+    const visibleIds = records.value.map((record) => record.id)
+    const sourceVisibleIndex = visibleIds.indexOf(sourceId)
+    const targetVisibleIndex = visibleIds.indexOf(targetId)
+    if (sourceVisibleIndex < 0 || targetVisibleIndex < 0 || sourceVisibleIndex === targetVisibleIndex) {
+      return
+    }
+    const visiblePositions = database.value.globalTaskOrder
+      .map((id, index) => (visibleIds.includes(id) ? index : -1))
+      .filter((index) => index >= 0)
+    const reorderedVisible = [...visibleIds]
+    moveBefore(reorderedVisible, sourceVisibleIndex, targetVisibleIndex)
+    visiblePositions.forEach((position, index) => {
+      const taskId = reorderedVisible[index]
+      if (taskId) database.value.globalTaskOrder[position] = taskId
+    })
+    scheduleSave()
   }
 
   const toggleTask = (taskId: string): void => {
@@ -297,6 +391,11 @@ export const useProplanStore = defineStore('proplan', () => {
         const index = list.findIndex((record) => record.id === recordId)
         if (index < 0) continue
         list.splice(index, 1)
+        if (section === 'tasks') {
+          database.value.globalTaskOrder = database.value.globalTaskOrder.filter(
+            (taskId) => taskId !== recordId
+          )
+        }
         if (selectedRecordId.value === recordId) selectedRecordId.value = null
         touchProject(project)
         return
@@ -314,6 +413,9 @@ export const useProplanStore = defineStore('proplan', () => {
     loaded,
     saving,
     saveError,
+    lastSavedAt,
+    lastSaveKind,
+    hasUnsavedChanges,
     currentDateKey,
     selectedProjectId,
     selectedRecordId,
@@ -337,6 +439,9 @@ export const useProplanStore = defineStore('proplan', () => {
     deleteProject,
     createRecord,
     updateSelectedRecord,
+    reorderProjects,
+    reorderRecords,
+    reorderGlobalTasks,
     toggleTask,
     deleteRecord,
     deleteSelectedRecord,

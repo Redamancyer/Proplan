@@ -43,6 +43,7 @@ export interface ProplanProject {
 export interface ProplanDatabase {
   version: 1
   projects: ProplanProject[]
+  globalTaskOrder: string[]
 }
 
 export type ProplanImageSource =
@@ -78,5 +79,6 @@ export interface ProplanRestoreResult {
 
 export const createEmptyProplanDatabase = (): ProplanDatabase => ({
   version: 1,
-  projects: []
+  projects: [],
+  globalTaskOrder: []
 })

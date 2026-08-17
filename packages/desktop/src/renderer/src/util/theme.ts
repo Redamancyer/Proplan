@@ -1,220 +1,33 @@
-import {
-  THEME_STYLE_ID,
-  COMMON_STYLE_ID,
-  DEFAULT_CODE_FONT_FAMILY,
-  oneDarkThemes,
-  railscastsThemes
-} from '../config'
-import {
-  dark,
-  graphite,
-  materialDark,
-  oneDark,
-  ulysses,
-  // New gogh themes - Dark
-  dracula,
-  nord,
-  catppuccinMocha,
-  gruvboxDark,
-  tokyoNight,
-  tokyoNightStorm,
-  solarizedDark,
-  ayuDark,
-  ayuMirage,
-  everforestDark,
-  rosePine,
-  rosePineMoon,
-  monokaiPro,
-  synthwave84,
-  horizonDark,
-  palenight,
-  oxocarbonDark,
-  kanagawa,
-  nightfox,
-  cyberdream,
-  // New gogh themes - Light
-  catppuccinLatte,
-  gruvboxLight,
-  tokyoNightLight,
-  solarizedLight,
-  ayuLight,
-  everforestLight,
-  rosePineDawn
-} from './themeColor'
-import { isLinux } from './index'
+import { COMMON_STYLE_ID, DEFAULT_CODE_FONT_FAMILY, THEME_STYLE_ID } from '../config'
+import { isDarkThemeId } from '../../../common/theme'
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const ORIGINAL_THEME = '#409EFF'
+const themeCss = import.meta.glob('../assets/themes/*.theme.css', {
+  eager: true,
+  import: 'default',
+  query: '?inline'
+}) as Record<string, string>
+const prismCss = import.meta.glob('../assets/themes/prismjs/*.theme.css', {
+  eager: true,
+  import: 'default',
+  query: '?inline'
+}) as Record<string, string>
 
-const patchTheme = (css: string): string => {
-  return `@media not print {\n${css}\n}`
-}
-
-const getEmojiPickerPatch = (): string => {
-  return isLinux
-    ? '.mu-emoji-picker section .emoji-wrapper .item span { font-family: sans-serif, "Noto Color Emoji"; }'
-    : ''
+const cssFor = (files: Record<string, string>, theme: string): string => {
+  const suffix = `/${theme}.theme.css`
+  return Object.entries(files).find(([filename]) => filename.endsWith(suffix))?.[1] ?? ''
 }
 
 export const addThemeStyle = (theme: string): void => {
-  const isCmRailscasts = railscastsThemes.includes(theme)
-  const isCmOneDark = oneDarkThemes.includes(theme)
-  const isDarkTheme = isCmOneDark || isCmRailscasts
-  let themeStyleEle = document.querySelector(`#${THEME_STYLE_ID}`) as HTMLStyleElement | null
-  if (!themeStyleEle) {
-    themeStyleEle = document.createElement('style')
-    themeStyleEle.id = THEME_STYLE_ID
-    document.head.appendChild(themeStyleEle)
+  let style = document.querySelector(`#${THEME_STYLE_ID}`) as HTMLStyleElement | null
+  if (!style) {
+    style = document.createElement('style')
+    style.id = THEME_STYLE_ID
+    document.head.appendChild(style)
   }
 
-  switch (theme) {
-    case 'light':
-      themeStyleEle.innerHTML = patchTheme(
-        ':root {\n  --link-color: var(--linkColor);\n  --blockquote-border-color: var(--blockquoteBorderColor);\n}'
-      )
-      break
-    case 'dark':
-      themeStyleEle.innerHTML = patchTheme(dark())
-      break
-    case 'material-dark':
-      themeStyleEle.innerHTML = patchTheme(materialDark())
-      break
-    case 'ulysses':
-      themeStyleEle.innerHTML = patchTheme(ulysses())
-      break
-    case 'graphite':
-      themeStyleEle.innerHTML = patchTheme(graphite())
-      break
-    case 'one-dark':
-      themeStyleEle.innerHTML = patchTheme(oneDark())
-      break
-    // New gogh themes - Dark
-    case 'dracula':
-      themeStyleEle.innerHTML = patchTheme(dracula())
-      break
-    case 'nord':
-      themeStyleEle.innerHTML = patchTheme(nord())
-      break
-    case 'catppuccin-mocha':
-      themeStyleEle.innerHTML = patchTheme(catppuccinMocha())
-      break
-    case 'gruvbox-dark':
-      themeStyleEle.innerHTML = patchTheme(gruvboxDark())
-      break
-    case 'tokyo-night':
-      themeStyleEle.innerHTML = patchTheme(tokyoNight())
-      break
-    case 'tokyo-night-storm':
-      themeStyleEle.innerHTML = patchTheme(tokyoNightStorm())
-      break
-    case 'solarized-dark':
-      themeStyleEle.innerHTML = patchTheme(solarizedDark())
-      break
-    case 'ayu-dark':
-      themeStyleEle.innerHTML = patchTheme(ayuDark())
-      break
-    case 'ayu-mirage':
-      themeStyleEle.innerHTML = patchTheme(ayuMirage())
-      break
-    case 'everforest-dark':
-      themeStyleEle.innerHTML = patchTheme(everforestDark())
-      break
-    case 'rose-pine':
-      themeStyleEle.innerHTML = patchTheme(rosePine())
-      break
-    case 'rose-pine-moon':
-      themeStyleEle.innerHTML = patchTheme(rosePineMoon())
-      break
-    case 'monokai-pro':
-      themeStyleEle.innerHTML = patchTheme(monokaiPro())
-      break
-    case 'synthwave-84':
-      themeStyleEle.innerHTML = patchTheme(synthwave84())
-      break
-    case 'horizon-dark':
-      themeStyleEle.innerHTML = patchTheme(horizonDark())
-      break
-    case 'palenight':
-      themeStyleEle.innerHTML = patchTheme(palenight())
-      break
-    case 'oxocarbon-dark':
-      themeStyleEle.innerHTML = patchTheme(oxocarbonDark())
-      break
-    case 'kanagawa':
-      themeStyleEle.innerHTML = patchTheme(kanagawa())
-      break
-    case 'nightfox':
-      themeStyleEle.innerHTML = patchTheme(nightfox())
-      break
-    case 'cyberdream':
-      themeStyleEle.innerHTML = patchTheme(cyberdream())
-      break
-    // New gogh themes - Light
-    case 'catppuccin-latte':
-      themeStyleEle.innerHTML = patchTheme(catppuccinLatte())
-      break
-    case 'gruvbox-light':
-      themeStyleEle.innerHTML = patchTheme(gruvboxLight())
-      break
-    case 'tokyo-night-light':
-      themeStyleEle.innerHTML = patchTheme(tokyoNightLight())
-      break
-    case 'solarized-light':
-      themeStyleEle.innerHTML = patchTheme(solarizedLight())
-      break
-    case 'ayu-light':
-      themeStyleEle.innerHTML = patchTheme(ayuLight())
-      break
-    case 'everforest-light':
-      themeStyleEle.innerHTML = patchTheme(everforestLight())
-      break
-    case 'rose-pine-dawn':
-      themeStyleEle.innerHTML = patchTheme(rosePineDawn())
-      break
-    default:
-      break
-  }
-
-  // workaround: use dark icons
-  document.body.classList.remove('dark')
-  if (isDarkTheme) {
-    document.body.classList.add('dark')
-  }
-
-  // change CodeMirror theme
-  const cm = document.querySelector('.CodeMirror')
-  if (cm) {
-    cm.classList.remove('cm-s-default')
-    cm.classList.remove('cm-s-one-dark')
-    cm.classList.remove('cm-s-railscasts')
-    if (isCmOneDark) {
-      cm.classList.add('cm-s-one-dark')
-    } else if (isCmRailscasts) {
-      cm.classList.add('cm-s-railscasts')
-    } else {
-      cm.classList.add('cm-s-default')
-    }
-  }
-}
-
-export const setEditorWidth = (value: string): void => {
-  const EDITOR_WIDTH_STYLE_ID = 'editor-width'
-  let result = ''
-  if (value && /^[0-9]+(?:ch|px|%)$/.test(value)) {
-    // Add 100px for the container's horizontal padding. Set both the legacy
-    // camelCase var (source mode) and the kebab-case var the active
-    // @muyajs/core engine reads for `.mu-container` max-width (issue #4828).
-    const width = `calc(100px + ${value})`
-    result = `:root { --editorAreaWidth: ${width}; --editor-area-width: ${width}; }`
-  }
-  let styleEle = document.querySelector(`#${EDITOR_WIDTH_STYLE_ID}`) as HTMLStyleElement | null
-  if (!styleEle) {
-    styleEle = document.createElement('style')
-    styleEle.setAttribute('id', EDITOR_WIDTH_STYLE_ID)
-    document.head.appendChild(styleEle)
-  }
-
-  styleEle.innerHTML = result
+  const selected = theme === 'light' ? '' : `${cssFor(themeCss, theme)}\n${cssFor(prismCss, theme)}`
+  style.textContent = `@media not print {\n${selected}\n}`
+  document.body.classList.toggle('dark', isDarkThemeId(theme))
 }
 
 export interface CommonStyleOptions {
@@ -224,28 +37,23 @@ export interface CommonStyleOptions {
   [key: string]: unknown
 }
 
-export const addCommonStyle = (options: CommonStyleOptions): void => {
-  const { codeFontFamily, codeFontSize, hideScrollbar } = options
-  let sheet = document.querySelector(`#${COMMON_STYLE_ID}`) as HTMLStyleElement | null
-  if (!sheet) {
-    sheet = document.createElement('style')
-    sheet.id = COMMON_STYLE_ID
-    document.head.appendChild(sheet)
+export const addCommonStyle = ({
+  codeFontFamily,
+  codeFontSize,
+  hideScrollbar
+}: CommonStyleOptions): void => {
+  let style = document.querySelector(`#${COMMON_STYLE_ID}`) as HTMLStyleElement | null
+  if (!style) {
+    style = document.createElement('style')
+    style.id = COMMON_STYLE_ID
+    document.head.appendChild(style)
   }
-
-  let scrollbarStyle = ''
-  if (hideScrollbar) {
-    scrollbarStyle = '::-webkit-scrollbar {display: none;}'
-  }
-
-  sheet.innerHTML = `${scrollbarStyle}
-.CodeMirror {
-font-family: ${codeFontFamily}, ${DEFAULT_CODE_FONT_FAMILY};
-font-size: ${codeFontSize}px;
-}
-
-${getEmojiPickerPatch()}
-`
+  const scrollbar = hideScrollbar ? '::-webkit-scrollbar { display: none; }' : ''
+  const emojiFont =
+    window.electron.process.platform === 'linux'
+      ? '.mu-emoji-picker section .emoji-wrapper .item span { font-family: sans-serif, "Noto Color Emoji"; }'
+      : ''
+  style.textContent = `${scrollbar}\n:root { --codeFontFamily: ${codeFontFamily}, ${DEFAULT_CODE_FONT_FAMILY}; --codeFontSize: ${codeFontSize}px; }\n${emojiFont}`
 }
 
 export interface CustomStyleOptions {
@@ -253,28 +61,21 @@ export interface CustomStyleOptions {
   [key: string]: unknown
 }
 
-export const addCustomStyle = (options: CustomStyleOptions): void => {
-  const { customCss } = options
-  let customStyleEle = document.querySelector('#custom-styles') as HTMLStyleElement | null
+export const addCustomStyle = ({ customCss }: CustomStyleOptions): void => {
+  let style = document.querySelector('#custom-styles') as HTMLStyleElement | null
   if (!customCss) {
-    customStyleEle?.remove()
+    style?.remove()
     return
   }
-  if (!customStyleEle) {
-    customStyleEle = document.createElement('style')
-    customStyleEle.id = 'custom-styles'
-    document.head.appendChild(customStyleEle)
+  if (!style) {
+    style = document.createElement('style')
+    style.id = 'custom-styles'
+    document.head.appendChild(style)
   }
-  customStyleEle.innerHTML = customCss
+  style.textContent = customCss
 }
 
-export interface AddStylesOptions extends CommonStyleOptions {
-  theme: string
-}
-
-// Append common sheet and theme at the end of head - order is important.
-export const addStyles = (options: AddStylesOptions): void => {
-  const { theme } = options
-  addThemeStyle(theme)
+export const addStyles = (options: CommonStyleOptions & { theme: string }): void => {
+  addThemeStyle(options.theme)
   addCommonStyle(options)
 }

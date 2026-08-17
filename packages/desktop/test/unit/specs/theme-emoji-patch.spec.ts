@@ -1,26 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-// `theme.ts` transitively imports `@/config`, whose first line reads
-// `window.path.sep` at module-load time. Stub the preload `window.path` surface
-// before the dynamic import runs.
 vi.hoisted(() => {
-  const w = globalThis as unknown as { window?: { path?: { sep: string } } }
+  const w = globalThis as unknown as {
+    window?: { electron?: { process: { platform: NodeJS.Platform } } }
+  }
   w.window ??= {}
-  w.window.path ??= { sep: '/' }
+  w.window.electron ??= { process: { platform: 'linux' } }
 })
 
-// `theme.ts` reads `isLinux` from `./util/index` (same module as `@/util`) at
-// the top level. The Linux-only emoji-picker font patch is composed into the
-// common <style> sheet (`#ag-common-style`) by `addCommonStyle`. We mock
-// `@/util` per test to flip the platform branch and re-import the module, then
-// assert the patched CSS still targets the engine `.mu-emoji-picker` selector so
-// a future mu-*/ag-* selector drift is caught (regression: muyajs -> @muyajs/core).
 const EMOJI_SELECTOR = '.mu-emoji-picker section .emoji-wrapper .item span'
 const EMOJI_FONT = 'Noto Color Emoji'
 
 const loadTheme = async(isLinux: boolean) => {
   vi.resetModules()
-  vi.doMock('@/util', () => ({ isLinux, isOsx: false, isWindows: false }))
+  window.electron.process.platform = isLinux ? 'linux' : 'darwin'
   return await import('@/util/theme')
 }
 
@@ -35,9 +28,7 @@ describe('theme.ts emoji-picker Linux font patch', () => {
     document.body.className = ''
   })
 
-  afterEach(() => {
-    vi.doUnmock('@/util')
-  })
+  afterEach(() => undefined)
 
   it('injects the .mu-emoji-picker font fallback into the common sheet on Linux', async() => {
     const { addCommonStyle } = await loadTheme(true)

@@ -16,7 +16,7 @@ import { addCustomStyle, addThemeStyle } from '@/util/theme'
 
 const preferencesStore = usePreferencesStore()
 const proplanStore = useProplanStore()
-preferencesStore.SET_USER_PREFERENCE(window.marktext?.initialState ?? {})
+preferencesStore.SET_USER_PREFERENCE(window.proplanBoot?.initialState ?? {})
 
 const { customCss, editorLineWidth, theme } = storeToRefs(preferencesStore)
 const editorMaxWidth = computed(() =>

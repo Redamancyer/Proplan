@@ -1,4 +1,4 @@
-appId: com.proplan.desktop
+appId: com.redamancyer.proplan
 productName: Proplan
 directories:
   buildResources: build
@@ -13,15 +13,10 @@ files:
   # ================================
   # Do not bundle these files
   # ================================
-  - '!node_modules/dragula/resources'
   - '!node_modules/**/*.js.map'
   - '!node_modules/**/*.cjs.map'
   - '!node_modules/**/*.mjs.map'
   - '!node_modules/**/*.ts.map'
-  - '!node_modules/@vscode/ripgrep/{jsconfig.json,*.md,LICENSE}'
-  - '!node_modules/@vscode/ripgrep/lib/download.js'
-  - '!node_modules/@vscode/ripgrep/lib/postinstall.js'
-  - '!node_modules/ced/vendor'
   # Large source files
   - '!node_modules/mermaid/dist/mermaid.js'
   - '!node_modules/mermaid/dist/mermaid.min.js'
@@ -29,7 +24,6 @@ files:
   - '!node_modules/katex/dist/katex.min.js'
   - '!node_modules/katex/dist/katex.mjs'
   # Don't bundle Linux build files
-  - '!node_modules/ced/build/Release/compact_enc_det.a'
   - '!node_modules/**/{*.vcxproj,*.vcxproj.filters}'
   - '!node_modules/**/build/Release/{*.lib,*.exp,*.ilk,*.pdb,*.iobj,*.ipdb}'
   - '!node_modules/**/build/Release/obj'
@@ -82,11 +76,12 @@ nsis:
   include: windows/installer.nsh
 mac:
   artifactName: 'Proplan-mac-${arch}-${version}.${ext}'
+  identity: '-'
   entitlementsInherit: build/mac/entitlements.mac.plist
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSCameraUsageDescription: Application requests access to the device's camera.
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   icon: static/icon.icns
   notarize: false
   target:

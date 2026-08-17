@@ -5,6 +5,7 @@ import {
   Brush as ThemeIcon,
   Picture as ImageIcon,
   Reading as SpellIcon,
+  Key as KeybindingsIcon,
   DocumentCopy as BackupIcon
 } from '@element-plus/icons-vue'
 
@@ -144,6 +145,12 @@ export const getCategory = (): PrefCategory[] => [
     path: '/preference/image'
   },
   {
+    name: t('preferences.categories.keybindings'),
+    label: 'keybindings',
+    icon: KeybindingsIcon,
+    path: '/preference/keybindings'
+  },
+  {
     name: t('preferences.categories.backup'),
     label: 'backup',
     icon: BackupIcon,
@@ -175,7 +182,7 @@ export const getTranslatedSearchContent: CachedTranslator = (() => {
       if (!visiblePreferenceKeys.has(k)) return
       const entry = preferencesSchema[k]
       if (!entry) return
-      const { description, enum: emums } = entry
+      const { description = '', enum: emums } = entry
 
       if (description.endsWith('--internal')) return
 

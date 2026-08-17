@@ -186,7 +186,7 @@ const collectDependencyNodes = (): Map<string, DependencyNode> => {
         const id = `${name}@${version}`
         const installed =
           dependency.path && fs.existsSync(path.join(dependency.path, 'package.json'))
-        if (!dependencies.has(id) && (installed || name.startsWith('@vscode/ripgrep-'))) {
+        if (!dependencies.has(id) && installed) {
           dependencies.set(id, dependency)
         }
         visit(dependency)
@@ -201,10 +201,6 @@ const collectDependencyNodes = (): Map<string, DependencyNode> => {
 const buildNotices = (): NoticePackage[] => {
   const applicationLicense = normalizeText(fs.readFileSync(applicationLicensePath, 'utf8'))
   const dependencies = collectDependencyNodes()
-  const ripgrepLicense = readLicenseFiles(
-    path.join(desktopRoot, 'node_modules', '@vscode', 'ripgrep')
-  )
-
   return [...dependencies.entries()]
     .map(([id, dependency]): NoticePackage => {
       if (!dependency.path) throw new Error(`Dependency ${id} has no installed path`)
@@ -221,14 +217,12 @@ const buildNotices = (): NoticePackage[] => {
         }
       const name = metadata.name ?? id.slice(0, id.lastIndexOf('@'))
       const version = metadata.version ?? dependency.version ?? 'unknown'
-      const license = name.startsWith('@vscode/ripgrep-') ? 'MIT' : normalizeLicense(metadata)
+      const license = normalizeLicense(metadata)
       const author = authorName(metadata, name)
       let licenseText = packageInstalled ? readLicenseFiles(dependency.path) : ''
 
-      if (!licenseText && (name === '@muyajs/core' || name === '@marktext/muyajs')) {
+      if (!licenseText && name === '@muyajs/core') {
         licenseText = applicationLicense
-      } else if (!licenseText && name.startsWith('@vscode/ripgrep-')) {
-        licenseText = ripgrepLicense
       } else if (!licenseText) {
         licenseText = fallbackLicenseText(license, author)
       }

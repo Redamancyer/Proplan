@@ -35,15 +35,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FolderOpened } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 
-const assetsPath = computed(() => {
-  const userDataPath = window.electron.paths.userData ?? ''
-  return window.path.join(userDataPath, 'proplan-assets')
+const assetsPath = ref('')
+onMounted(async () => {
+  assetsPath.value = await window.proplan.getAssetsPath()
 })
 
 const managedSettings = computed(() => [
@@ -70,8 +70,7 @@ const managedSettings = computed(() => [
 ])
 
 const showAssetsFolder = async (): Promise<void> => {
-  await window.fileUtils.ensureDir(assetsPath.value)
-  await window.electron.shell.openPath(assetsPath.value)
+  await window.proplan.openAssetsFolder()
 }
 </script>
 

@@ -86,7 +86,7 @@ if (!process.mas) {
 registerSandboxIpcHandlers()
 
 // Windows-specific AppUserModelID
-electronApp.setAppUserModelId('com.proplan.desktop')
+electronApp.setAppUserModelId('com.redamancyer.proplan')
 
 // Dev shortcuts and reload suppression
 app.on('browser-window-created', (_, window) => {

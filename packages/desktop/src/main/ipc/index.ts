@@ -1,27 +1,17 @@
 import { registerBootInfo } from './bootInfo'
-import { registerFsHandlers } from './fs'
-import { registerPathHandlers } from './paths'
-import { registerRipgrepHandlers } from './ripgrep'
-import { registerUploaderHandlers } from './uploader'
 import { registerFontsHandlers } from './fonts'
+import { registerI18nHandlers } from './i18n'
+import { registerLicenseHandlers } from './licenses'
+import { registerProplanHandlers } from './proplan'
 import { registerShellHandlers } from './shell'
 import { registerWindowHandlers } from './window'
-import { registerCmdHandlers } from './cmd'
-import { registerI18nHandlers } from './i18n'
-import { registerProplanHandlers } from './proplan'
-import { registerLicenseHandlers } from './licenses'
 
 export const registerSandboxIpcHandlers = (): void => {
   registerBootInfo()
-  registerFsHandlers()
-  registerPathHandlers()
-  registerRipgrepHandlers()
-  registerUploaderHandlers()
   registerFontsHandlers()
+  registerI18nHandlers()
+  registerLicenseHandlers()
+  registerProplanHandlers()
   registerShellHandlers()
   registerWindowHandlers()
-  registerCmdHandlers()
-  registerI18nHandlers()
-  registerProplanHandlers()
-  registerLicenseHandlers()
 }

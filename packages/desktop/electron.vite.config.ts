@@ -35,7 +35,6 @@ export default defineConfig({
       alias: {
         '@': resolve(__dirname, 'src/renderer/src'),
         common: resolve(__dirname, 'src/common'),
-        muya: resolve(__dirname, '../muyajs'),
         '@shared': resolve(__dirname, 'src/shared')
       },
       extensions: ['.mjs', '.ts', '.js', '.json']
@@ -43,19 +42,10 @@ export default defineConfig({
   },
   preload: {
     // --> Bundled as CommonJS
-    // With sandbox: true the renderer's preload can only `require('electron')`
-    // (plus a few built-ins). Inline `pathe` (ESM-only) so the bundled preload
-    // doesn't try to require it from node_modules at runtime.
-    build: {
-      externalizeDeps: {
-        exclude: ['pathe']
-      }
-    },
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer/src'),
         common: resolve(__dirname, 'src/common'),
-        muya: resolve(__dirname, '../muyajs'),
         '@shared': resolve(__dirname, 'src/shared')
       },
       extensions: ['.mjs', '.ts', '.js', '.json']
@@ -70,30 +60,13 @@ export default defineConfig({
     // statements without pulling in Node's path module. `pathe` always uses
     // `/` separators and handles Windows drive letters correctly.
     assetsInclude: ['**/*.md'],
-    // Some bundled deps (e.g. `custom-event` via `dragula`) reference the
-    // Node-only `global` at module load — undefined in a sandboxed renderer.
-    // Substitute it with `globalThis` at build time so the imports don't
-    // throw before Vue mounts.
-    define: {
-      global: 'globalThis'
-    },
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer/src'),
         common: resolve(__dirname, 'src/common'),
-        muya: resolve(__dirname, '../muyajs'),
-        '@shared': resolve(__dirname, 'src/shared'),
-        path: 'pathe'
+        '@shared': resolve(__dirname, 'src/shared')
       },
       extensions: ['.mjs', '.ts', '.js', '.json', '.vue']
-    },
-    optimizeDeps: {
-      include: ['pako', 'pathe'],
-      esbuildOptions: {
-        define: {
-          global: 'globalThis'
-        }
-      }
     },
     plugins: [vue(), svgLoader()] as PluginOption[],
     css: {
