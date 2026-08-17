@@ -1,0 +1,37 @@
+name: Validate Licenses
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'LICENSE'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/desktop/package.json'
+      - 'packages/desktop/build/THIRD-PARTY-LICENSES.txt'
+      - 'scripts/generateThirdPartyLicense.ts'
+      - 'scripts/validateLicenses.ts'
+  push:
+    branches:
+      - main
+    paths:
+      - 'LICENSE'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/desktop/package.json'
+      - 'packages/desktop/build/THIRD-PARTY-LICENSES.txt'
+      - 'scripts/generateThirdPartyLicense.ts'
+      - 'scripts/validateLicenses.ts'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Validate dependency licenses
+        run: pnpm run validate-licenses

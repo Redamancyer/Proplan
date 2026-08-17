@@ -1,0 +1,407 @@
+<template>
+  <section class="task-calendar">
+    <header class="calendar-header drag-region">
+      <div class="calendar-heading no-drag">
+        <span class="calendar-eyebrow">{{ eyebrow }}</span>
+        <h2>{{ monthTitle }}</h2>
+        <span class="calendar-summary">
+          本月 {{ monthItemCount }} 项
+          <template v-if="unscheduledItemCount"> · 未排期 {{ unscheduledItemCount }} 项</template>
+        </span>
+      </div>
+
+      <div class="calendar-actions no-drag">
+        <button
+          class="today-button"
+          @click="goToToday"
+        >
+          今天
+        </button>
+        <button
+          class="calendar-icon-button"
+          title="上个月"
+          aria-label="上个月"
+          @click="changeMonth(-1)"
+        >
+          <ArrowLeft />
+        </button>
+        <button
+          class="calendar-icon-button"
+          title="下个月"
+          aria-label="下个月"
+          @click="changeMonth(1)"
+        >
+          <ArrowRight />
+        </button>
+      </div>
+    </header>
+
+    <div class="weekday-row">
+      <span
+        v-for="weekday in weekdays"
+        :key="weekday"
+      >{{ weekday }}</span>
+    </div>
+
+    <div class="calendar-grid">
+      <div
+        v-for="day in visibleDays"
+        :key="day.key"
+        class="calendar-day"
+        :class="{ outside: !day.inCurrentMonth, today: day.isToday }"
+      >
+        <div class="day-heading">
+          <span class="day-number">{{ day.dayNumber }}</span>
+          <span
+            v-if="day.isToday"
+            class="today-label"
+          >今天</span>
+        </div>
+
+        <div class="day-tasks">
+          <button
+            v-for="item in itemsByDate.get(day.key) ?? []"
+            :key="item.id"
+            class="calendar-task"
+            :class="{ completed: item.completed }"
+            :title="`${item.context} · ${item.title}`"
+            @click="emit('selectItem', item.id, item.kind)"
+          >
+            <span
+              class="task-project-mark"
+              :style="{ background: item.color }"
+            />
+            <span class="task-title">
+              <span class="task-context">{{ item.context }}</span>
+              {{ item.title }}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import type { ProplanCalendarItem, ProplanSection } from '@shared/types/proplan'
+
+const props = defineProps<{
+  eyebrow: string
+  items: ProplanCalendarItem[]
+  todayKey: string
+}>()
+
+const emit = defineEmits<{
+  selectItem: [itemId: string, kind: ProplanSection]
+}>()
+
+const weekdays = ['一', '二', '三', '四', '五', '六', '日']
+const today = new Date()
+const visibleMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1))
+
+const dateKey = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const visibleMonthKey = computed(() => dateKey(visibleMonth.value).slice(0, 7))
+const monthTitle = computed(() =>
+  visibleMonth.value.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
+)
+const monthItemCount = computed(
+  () => props.items.filter((item) => item.date?.startsWith(visibleMonthKey.value)).length
+)
+const unscheduledItemCount = computed(() => props.items.filter((item) => !item.date).length)
+const itemsByDate = computed(() => {
+  const result = new Map<string, ProplanCalendarItem[]>()
+  for (const item of props.items) {
+    if (!item.date) continue
+    const entries = result.get(item.date) ?? []
+    entries.push(item)
+    result.set(item.date, entries)
+  }
+  return result
+})
+
+const visibleDays = computed(() => {
+  const year = visibleMonth.value.getFullYear()
+  const month = visibleMonth.value.getMonth()
+  const firstWeekday = new Date(year, month, 1).getDay()
+  const mondayOffset = firstWeekday === 0 ? 6 : firstWeekday - 1
+  const firstVisibleDate = new Date(year, month, 1 - mondayOffset)
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(
+      firstVisibleDate.getFullYear(),
+      firstVisibleDate.getMonth(),
+      firstVisibleDate.getDate() + index
+    )
+    const key = dateKey(date)
+    return {
+      key,
+      dayNumber: date.getDate(),
+      inCurrentMonth: date.getMonth() === month,
+      isToday: key === props.todayKey
+    }
+  })
+})
+
+const changeMonth = (offset: number): void => {
+  visibleMonth.value = new Date(
+    visibleMonth.value.getFullYear(),
+    visibleMonth.value.getMonth() + offset,
+    1
+  )
+}
+
+const goToToday = (): void => {
+  const date = new Date()
+  visibleMonth.value = new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+watch(
+  () => props.todayKey,
+  (nextToday, previousToday) => {
+    if (visibleMonthKey.value === previousToday.slice(0, 7)) {
+      const [year, month] = nextToday.split('-').map(Number)
+      if (year && month) visibleMonth.value = new Date(year, month - 1, 1)
+    }
+  }
+)
+</script>
+
+<style scoped>
+.task-calendar {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--editorColor80);
+  background: var(--editorBgColor);
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag,
+button {
+  -webkit-app-region: no-drag;
+}
+
+.calendar-header {
+  min-height: 104px;
+  flex: 0 0 104px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 28px 17px;
+  border-bottom: 1px solid var(--editorColor10);
+}
+
+.calendar-heading {
+  min-width: 0;
+}
+.calendar-eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--editorColor50);
+  font-size: 10px;
+  font-weight: 650;
+}
+.calendar-heading h2 {
+  display: inline;
+  margin: 0;
+  font-size: 24px;
+  line-height: 30px;
+  letter-spacing: 0;
+}
+.calendar-summary {
+  margin-left: 12px;
+  color: var(--editorColor50);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.calendar-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.calendar-actions button {
+  height: 28px;
+  border: 1px solid var(--editorColor10);
+  border-radius: 5px;
+  color: var(--editorColor80);
+  background: var(--editorBgColor);
+}
+.calendar-actions button:hover {
+  background: var(--editorColor10);
+}
+.today-button {
+  padding: 0 11px;
+  font-size: 11px;
+}
+.calendar-icon-button {
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.calendar-icon-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.weekday-row {
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-bottom: 1px solid var(--editorColor10);
+}
+.weekday-row span {
+  display: flex;
+  align-items: center;
+  padding-left: 9px;
+  color: var(--editorColor50);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.calendar-grid {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+.calendar-day {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border-right: 1px solid var(--editorColor10);
+  border-bottom: 1px solid var(--editorColor10);
+  background: var(--editorBgColor);
+}
+.calendar-day:nth-child(7n) {
+  border-right: 0;
+}
+.calendar-day:nth-last-child(-n + 7) {
+  border-bottom: 0;
+}
+.calendar-day.outside {
+  background: var(--editorColor04);
+}
+.calendar-day.outside .day-number,
+.calendar-day.outside .calendar-task {
+  opacity: 0.48;
+}
+
+.day-heading {
+  height: 23px;
+  flex: 0 0 23px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.day-number {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--editorColor60);
+  font-size: 11px;
+}
+.calendar-day.today .day-number {
+  color: white;
+  background: var(--themeColor);
+}
+.today-label {
+  color: var(--themeColor);
+  font-size: 9px;
+  line-height: 20px;
+}
+
+.day-tasks {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.day-tasks::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+.calendar-task {
+  width: 100%;
+  height: 22px;
+  flex: 0 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--editorColor80);
+  text-align: left;
+  background: var(--editorColor04);
+}
+.calendar-task:hover {
+  background: var(--themeColor10);
+}
+.calendar-task.completed {
+  color: var(--editorColor40);
+}
+.calendar-task.completed .task-title {
+  text-decoration: line-through;
+}
+.task-project-mark {
+  width: 3px;
+  height: 12px;
+  flex: 0 0 3px;
+  border-radius: 2px;
+}
+.task-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-context {
+  color: var(--editorColor50);
+}
+
+@media (max-width: 1040px) {
+  .calendar-header {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+  .calendar-summary {
+    display: block;
+    margin: 2px 0 0;
+  }
+  .calendar-day {
+    padding: 4px;
+  }
+  .today-label {
+    display: none;
+  }
+}
+</style>
