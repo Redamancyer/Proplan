@@ -18,6 +18,7 @@ import { showEditorContextMenu } from '../contextMenu/editor'
 import { loadMarkdownFile } from '../filesystem/markdown'
 import { switchLanguage } from '../spellchecker'
 import fs from 'fs'
+import { shouldExitFullScreen } from './fullscreen'
 
 type RawMarkdownDocument = Awaited<ReturnType<typeof loadMarkdownFile>>
 
@@ -207,6 +208,13 @@ class EditorWindow extends BaseWindow {
       log.error(
         `The window failed to load or was cancelled: ${errorCode}; ${errorDescription}; @ ${url}`
       )
+    })
+
+    win.webContents.on('before-input-event', (event, input) => {
+      if (shouldExitFullScreen(input, win!.isFullScreen())) {
+        event.preventDefault()
+        win!.setFullScreen(false)
+      }
     })
 
     win.webContents.once('render-process-gone', async(_event, { reason }) => {

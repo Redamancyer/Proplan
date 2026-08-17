@@ -5,7 +5,6 @@ import {
   Brush as ThemeIcon,
   Picture as ImageIcon,
   Reading as SpellIcon,
-  Operation as KeyBindingIcon,
   DocumentCopy as BackupIcon
 } from '@element-plus/icons-vue'
 
@@ -145,12 +144,6 @@ export const getCategory = (): PrefCategory[] => [
     path: '/preference/image'
   },
   {
-    name: t('preferences.categories.keybindings'),
-    label: 'keybindings',
-    icon: KeyBindingIcon,
-    path: '/preference/keybindings'
-  },
-  {
     name: t('preferences.categories.backup'),
     label: 'backup',
     icon: BackupIcon,
@@ -215,7 +208,6 @@ export const getTranslatedSearchContent: CachedTranslator = (() => {
         'spelling',
         'theme',
         'image',
-        'keybindings',
         'backup'
       ]
       if (!validRoutes.includes(routeCategory)) routeCategory = 'general'

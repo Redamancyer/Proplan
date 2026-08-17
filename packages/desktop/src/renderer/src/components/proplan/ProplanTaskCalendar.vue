@@ -2,7 +2,6 @@
   <section class="task-calendar">
     <header class="calendar-header drag-region">
       <div class="calendar-heading no-drag">
-        <span class="calendar-eyebrow">{{ eyebrow }}</span>
         <h2>{{ monthTitle }}</h2>
         <span class="calendar-summary">
           本月 {{ monthItemCount }} 项
@@ -88,7 +87,6 @@ import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import type { ProplanCalendarItem, ProplanSection } from '@shared/types/proplan'
 
 const props = defineProps<{
-  eyebrow: string
   items: ProplanCalendarItem[]
   todayKey: string
 }>()
@@ -195,37 +193,31 @@ button {
 }
 
 .calendar-header {
-  min-height: 104px;
-  flex: 0 0 104px;
+  min-height: var(--record-header-height, 92px);
+  flex: 0 0 var(--record-header-height, 92px);
+  box-sizing: border-box;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 0 28px 17px;
+  padding: 0 28px calc(var(--header-bottom-padding, 12px) - 1px);
   border-bottom: 1px solid var(--editorColor10);
 }
 
 .calendar-heading {
   min-width: 0;
 }
-.calendar-eyebrow {
-  display: block;
-  margin-bottom: 3px;
-  color: var(--editorColor50);
-  font-size: 10px;
-  font-weight: 650;
-}
 .calendar-heading h2 {
-  display: inline;
   margin: 0;
-  font-size: 24px;
-  line-height: 30px;
+  font-size: var(--header-title-size, 20px);
+  line-height: var(--header-title-line-height, 29px);
   letter-spacing: 0;
 }
 .calendar-summary {
-  margin-left: 12px;
+  display: block;
   color: var(--editorColor50);
-  font-size: 11px;
+  font-size: var(--header-description-size, 12px);
+  line-height: var(--header-description-line-height, 22px);
   white-space: nowrap;
 }
 

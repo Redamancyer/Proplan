@@ -9,7 +9,6 @@ import type { IUserPreferences } from '@shared/types/preferences'
 import { isLinux, isOsx } from '../config'
 import { normalizeAndResolvePath } from '../filesystem'
 import { normalizeMarkdownPath } from '../filesystem/markdown'
-import { registerKeyboardListeners } from '../keyboard'
 import { selectTheme } from '../menu/actions/theme'
 import registerSpellcheckerListeners from '../spellchecker'
 import { watchers } from '../utils/imagePathAutoComplement'
@@ -398,7 +397,6 @@ class App {
   }
 
   private _listenForIpcMain(): void {
-    registerKeyboardListeners()
     registerSpellcheckerListeners()
 
     // Handle language setting requests
@@ -555,35 +553,6 @@ class App {
       const { keybindings } = this._accessor
       // Convert map to object
       win.webContents.send('mt::keybindings-response', Object.fromEntries(keybindings.keys))
-    })
-
-    ipcMain.on('mt::open-keybindings-config', () => {
-      const { keybindings } = this._accessor
-      keybindings.openConfigInFileManager()
-    })
-
-    ipcMain.handle('mt::keybinding-get-pref-keybindings', () => {
-      const { keybindings } = this._accessor
-      const defaultKeybindings = keybindings.getDefaultKeybindings()
-      const userKeybindings = keybindings.getUserKeybindings()
-      return { defaultKeybindings, userKeybindings }
-    })
-
-    ipcMain.handle('mt::keybinding-save-user-keybindings', async(_event, userKeybindings) => {
-      const { keybindings, menu } = this._accessor
-      const editorWindows = this._windowManager
-        .getWindowsByType(WindowType.EDITOR)
-        .map(({ win }) => win.browserWindow)
-        .filter((win): win is BrowserWindow => win != null)
-      const saved = await keybindings.setUserKeybindings(userKeybindings, editorWindows)
-
-      menu.updateKeybindings()
-      const keybindingMap = Object.fromEntries(keybindings.keys)
-      for (const win of editorWindows) {
-        win.webContents.send('mt::keybindings-response', keybindingMap)
-      }
-
-      return saved
     })
 
     ipcMain.handle('mt::fs-trash-item', async(_event, fullPath: string) => {

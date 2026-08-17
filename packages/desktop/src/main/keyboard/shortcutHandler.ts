@@ -1,11 +1,5 @@
-import { shell, type BrowserWindow } from 'electron'
-import fs from 'fs'
-import fsPromises from 'fs/promises'
-import path from 'path'
-import log from 'electron-log'
-import { electronLocalshortcut, isValidElectronAccelerator } from '@hfelix/electron-localshortcut'
-import { isFile2 } from 'common/filesystem'
-import { isEqualAccelerator } from 'common/keybinding'
+import type { BrowserWindow } from 'electron'
+import { electronLocalshortcut } from '@hfelix/electron-localshortcut'
 import { isLinux, isOsx } from '../config'
 import { getKeyboardInfo, keyboardLayoutMonitor, type KeyboardInfo } from '../keyboard'
 import keybindingsDarwin from './keybindingsDarwin'
@@ -16,10 +10,37 @@ import type { AppEnvironment } from '../app/env'
 
 type ShortcutCallback = (win: BrowserWindow) => void
 
+const BASIC_KEYBINDING_IDS = new Set([
+  'file.new-window',
+  'file.new-tab',
+  'file.open-file',
+  'file.open-folder',
+  'file.save',
+  'file.save-as',
+  'file.print',
+  'file.preferences',
+  'file.close-tab',
+  'file.close-window',
+  'file.quit',
+  'edit.undo',
+  'edit.redo',
+  'edit.cut',
+  'edit.copy',
+  'edit.paste',
+  'edit.paste-as-plaintext',
+  'edit.select-all',
+  'edit.find',
+  'edit.find-next',
+  'edit.find-previous',
+  'edit.replace',
+  'format.strong',
+  'format.emphasis',
+  'format.underline',
+  'window.toggle-full-screen'
+])
+
 class Keybindings {
-  configPath: string
   commandManager: CommandManager
-  userKeybindings: Map<string, string>
   keys: Map<string, string>
 
   /**
@@ -27,11 +48,7 @@ class Keybindings {
    * @param appEnvironment The application environment instance.
    */
   constructor(commandManager: CommandManager, appEnvironment: AppEnvironment) {
-    const { userDataPath } = appEnvironment.paths
-    this.configPath = path.join(userDataPath, 'keybindings.json')
     this.commandManager = commandManager
-
-    this.userKeybindings = new Map()
     this.keys = this.getDefaultKeybindings()
     this._prepareKeyMapper()
 
@@ -44,9 +61,6 @@ class Keybindings {
         }
       }
     }
-
-    // Load user-defined keybindings
-    this._loadLocalKeybindings()
   }
 
   getAccelerator(id: string): string | null {
@@ -72,10 +86,6 @@ class Keybindings {
     })
   }
 
-  unregisterAccelerator(win: BrowserWindow, accelerator: string): void {
-    electronLocalshortcut.unregister(win, accelerator)
-  }
-
   registerEditorKeyHandlers(win: BrowserWindow): void {
     for (const [id, accelerator] of this.keys) {
       if (accelerator && accelerator.length > 1) {
@@ -86,69 +96,20 @@ class Keybindings {
     }
   }
 
-  openConfigInFileManager(): void {
-    const { configPath } = this
-    if (!isFile2(configPath)) {
-      fs.writeFileSync(configPath, '{\n\n\n}\n', 'utf-8')
-    }
-    shell.openPath(configPath).catch((err: unknown) => console.error(err))
-  }
-
   getDefaultKeybindings(): Map<string, string> {
+    let platformKeybindings: Map<string, string>
     if (isOsx) {
-      return keybindingsDarwin
+      platformKeybindings = keybindingsDarwin
     } else if (isLinux) {
-      return keybindingsLinux
+      platformKeybindings = keybindingsLinux
+    } else {
+      platformKeybindings = keybindingsWindows
     }
-    return keybindingsWindows
-  }
-
-  /**
-   * Returns all user key bindings.
-   *
-   * @returns User key bindings.
-   */
-  getUserKeybindings(): Map<string, string> {
-    return this.userKeybindings
-  }
-
-  /**
-   * Sets and saves the given user key bindings on disk.
-   *
-   * @param userKeybindings New user key bindings.
-   */
-  async setUserKeybindings(
-    userKeybindings: Map<string, string> | Iterable<readonly [string, string]>,
-    windows: BrowserWindow[] = []
-  ): Promise<boolean> {
-    this.userKeybindings = new Map(userKeybindings)
-    const saved = await this._saveUserKeybindings()
-    this._reloadKeybindings(windows)
-    return saved
-  }
-
-  /**
-   * Rebuilds the active key map from the defaults plus the persisted user
-   * keybindings and re-registers shortcuts on the given windows, so a change
-   * takes effect without restarting the application.
-   */
-  _reloadKeybindings(windows: BrowserWindow[]): void {
-    const previousAccelerators = [...this.keys.values()].filter(
-      (accelerator) => accelerator && accelerator.length > 1
+    return new Map(
+      [...platformKeybindings].filter(([id, accelerator]) =>
+        BASIC_KEYBINDING_IDS.has(id) && accelerator.length > 0
+      )
     )
-
-    this.keys = this.getDefaultKeybindings()
-    this._loadLocalKeybindings()
-
-    for (const win of windows) {
-      if (!win || win.isDestroyed()) {
-        continue
-      }
-      for (const accelerator of previousAccelerators) {
-        this.unregisterAccelerator(win, accelerator)
-      }
-      this.registerEditorKeyHandlers(win)
-    }
   }
 
   // --- private --------------------------------
@@ -167,117 +128,6 @@ class Keybindings {
       }
       electronLocalshortcut.setKeyboardLayout(layout, keymap)
     })
-  }
-
-  async _saveUserKeybindings(): Promise<boolean> {
-    const { configPath, userKeybindings } = this
-    try {
-      const userKeybindingJson = JSON.stringify(Object.fromEntries(userKeybindings), null, 2)
-      await fsPromises.writeFile(configPath, userKeybindingJson, 'utf8')
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  _loadLocalKeybindings(): void {
-    const safeMode = (globalThis as typeof globalThis & { MARKTEXT_SAFE_MODE?: boolean })
-      .MARKTEXT_SAFE_MODE
-    if (safeMode || !isFile2(this.configPath)) {
-      return
-    }
-
-    const rawUserKeybindings = this._loadUserKeybindingsFromDisk()
-    if (!rawUserKeybindings) {
-      log.warn('Invalid keybinding configuration: failed to load or parse file.')
-      return
-    }
-
-    // keybindings.json example:
-    // {
-    //   "file.save": "CmdOrCtrl+S",
-    //   "file.save-as": "CmdOrCtrl+Shift+S"
-    // }
-
-    const userAccelerators: Map<string, string> = new Map()
-    for (const key in rawUserKeybindings) {
-      if (this.keys.has(key)) {
-        const value = rawUserKeybindings[key]
-        if (typeof value === 'string') {
-          if (value.length === 0) {
-            // Unset key
-            userAccelerators.set(key, '')
-          } else if (isValidElectronAccelerator(value)) {
-            userAccelerators.set(key, value)
-          } else {
-            console.error(`[WARNING] "${value}" is not a valid accelerator.`)
-          }
-        }
-      }
-    }
-
-    // Check for duplicate user shortcuts
-    for (const [keyA, valueA] of userAccelerators) {
-      for (const [keyB, valueB] of userAccelerators) {
-        if (valueA !== '' && keyA !== keyB && isEqualAccelerator(valueA, valueB)) {
-          const err = `Invalid keybindings.json configuration: Duplicate value for "${keyA}" and "${keyB}"!`
-          console.log(err)
-          log.error(err)
-          return
-        }
-      }
-    }
-
-    if (userAccelerators.size === 0) {
-      return
-    }
-
-    // Deep clone shortcuts
-    const accelerators = new Map(this.keys)
-
-    // Check for duplicate shortcuts
-    for (const [userKey, userValue] of userAccelerators) {
-      // Only search for conflicts when the user actually bound a key. Empty means "unbound"
-      // and would incorrectly match any other default-empty entry via isEqualAccelerator.
-      if (userValue) {
-        for (const [key, value] of accelerators) {
-          // This is a workaround to unset key bindings that the user used in `keybindings.json` before
-          // proper settings. Keep this for now, but add the ID to the users key binding that we show the
-          // right bindings in settings.
-          if (isEqualAccelerator(value, userValue)) {
-            // Unset default key
-            accelerators.set(key, '')
-
-            // This entry is actually unset because the user used the accelerator.
-            if (userAccelerators.get(key) == null) {
-              userAccelerators.set(key, '')
-            }
-
-            // A accelerator should only exist once in the default map.
-            break
-          }
-        }
-      }
-      accelerators.set(userKey, userValue)
-    }
-
-    // Update key bindings
-    this.keys = accelerators
-
-    // Save user keybindings for settings
-    this.userKeybindings = userAccelerators
-  }
-
-  _loadUserKeybindingsFromDisk(): Record<string, unknown> | null {
-    try {
-      const obj = JSON.parse(fs.readFileSync(this.configPath, 'utf8'))
-      if (typeof obj !== 'object') {
-        return null
-      }
-      return obj
-    } catch {
-      return null
-    }
   }
 }
 

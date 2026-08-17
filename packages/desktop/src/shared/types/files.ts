@@ -153,7 +153,6 @@ export interface BootstrapEditorConfig {
   tabBarVisibility: boolean
   sourceCodeModeEnabled: boolean
   preferences?: unknown
-  userKeybindings?: unknown
   recentlyUsedFiles?: string[]
   windowId?: number
   [key: string]: unknown

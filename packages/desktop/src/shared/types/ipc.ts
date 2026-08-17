@@ -17,7 +17,6 @@
  *   3. Wire the caller via the typed preload bridge in src/preload/index.ts.
  */
 
-import type { IKeyboardLayoutInfo, IKeyboardMapping } from 'native-keymap'
 import type {
   MarkdownDocument,
   TabOptions,
@@ -71,12 +70,6 @@ export interface IpcInvokeChannels {
   'mt::i18n::is-supported': { args: [lang: string]; ret: boolean }
   'mt::i18n::load': { args: [language: string]; ret: Record<string, unknown> }
   'mt::i18n::supported': { args: []; ret: string[] }
-  'mt::keybinding-get-keyboard-info': { args: []; ret: KeyboardInfo }
-  'mt::keybinding-get-pref-keybindings': {
-    args: []
-    ret: { defaultKeybindings: Map<string, string>; userKeybindings: Map<string, string> }
-  }
-  'mt::keybinding-save-user-keybindings': { args: [bindings: unknown]; ret: boolean }
   'mt::licenses::read': { args: [kind: LicenseDocumentKind]; ret: string }
   'mt::paths::is-image': { args: [path: string]; ret: boolean }
   'mt::proplan::backup': { args: []; ret: ProplanBackupResult }
@@ -144,13 +137,11 @@ export interface IpcSendChannels {
   'mt::format-link-click': [payload: { data: unknown; dirname: string }]
   'mt::get-current-language': []
   'mt::handle-renderer-error': [error: unknown]
-  'mt::keybinding-debug-dump-keyboard-info': []
   'mt::make-screenshot': []
   'mt::menu::popup': [template: MenuTemplate, position?: MenuPopupPosition]
   'mt::menu::popup-application': [position?: MenuPopupPosition]
   'mt::open-file': [filePath: string, options?: unknown]
   'mt::open-file-by-window-id': [windowId: number, filePath: string, options?: unknown]
-  'mt::open-keybindings-config': []
   'mt::proplan::flush-before-backup-complete': [requestId: string, error?: string]
   'mt::open-setting-window': []
   'mt::rename': [
@@ -320,16 +311,6 @@ export interface IpcMainEventChannels {
 // =================================================================
 // Auxiliary types
 // =================================================================
-
-/**
- * Snapshot of the active OS keyboard layout, returned by
- * `mt::keybinding-get-keyboard-info`. Mirrors the runtime shape produced
- * by `native-keymap` (see `src/main/keyboard/index.ts#getKeyboardInfo`).
- */
-export interface KeyboardInfo {
-  layout: IKeyboardLayoutInfo
-  keymap: IKeyboardMapping
-}
 
 export interface BootInfo {
   platform: NodeJS.Platform

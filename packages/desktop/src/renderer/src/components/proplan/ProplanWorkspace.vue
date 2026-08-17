@@ -8,7 +8,10 @@
       :style="{ width: `${projectWidth}px` }"
     >
       <header class="project-titlebar drag-region">
-        <strong>Proplan</strong>
+        <div class="project-heading">
+          <strong>Proplan</strong>
+          <span class="pane-label">项目</span>
+        </div>
         <button
           class="icon-button no-drag"
           title="新建项目"
@@ -17,10 +20,6 @@
           <Plus />
         </button>
       </header>
-
-      <div class="pane-label">
-        项目
-      </div>
       <div class="project-list">
         <button
           v-for="project in projects"
@@ -74,9 +73,9 @@
     >
       <header class="record-header drag-region">
         <template v-if="view === 'globalTasks'">
-          <div>
-            <span class="header-eyebrow">概览</span>
+          <div class="record-heading">
             <h2>我的待办</h2>
+            <span class="header-eyebrow">概览</span>
           </div>
         </template>
         <template v-else-if="selectedProject">
@@ -95,9 +94,9 @@
           >
         </template>
         <template v-else>
-          <div>
-            <span class="header-eyebrow">工作区</span>
+          <div class="record-heading">
             <h2>项目</h2>
+            <span class="header-eyebrow">工作区</span>
           </div>
         </template>
       </header>
@@ -251,11 +250,23 @@
               >
               <span>{{ selectedRecord.completed ? '已完成' : '待完成' }}</span>
             </label>
-            <label>
-              <Calendar />
+            <label
+              class="due-date-control"
+              :class="{ empty: !selectedRecord.dueAt }"
+              title="设置截止日期"
+              @click.prevent="openDueDatePicker"
+            >
+              <Calendar aria-hidden="true" />
+              <span
+                class="due-date-label"
+                aria-hidden="true"
+              >{{ dueDateLabel }}</span>
               <input
+                ref="dueDateInput"
+                class="due-date-input"
                 type="date"
                 :value="selectedRecord.dueAt ?? ''"
+                aria-label="截止日期"
                 @change="updateDueDate"
               >
             </label>
@@ -279,7 +290,6 @@
 
       <ProplanTaskCalendar
         v-else-if="view === 'globalTasks'"
-        eyebrow="我的日程"
         :items="globalCalendarItems"
         :today-key="currentDateKey"
         @select-item="openGlobalCalendarItem"
@@ -287,7 +297,6 @@
 
       <ProplanTaskCalendar
         v-else-if="selectedProject"
-        :eyebrow="selectedProject.name"
         :items="projectCalendarItems"
         :today-key="currentDateKey"
         @select-item="openProjectCalendarItem"
@@ -377,6 +386,7 @@ const {
 } = storeToRefs(store)
 const projectWidth = ref(PROJECT_MIN)
 const recordWidth = ref(RECORD_MIN)
+const dueDateInput = ref<HTMLInputElement | null>(null)
 const recordContextMenu = ref<{
   kind: 'project' | 'record'
   id: string
@@ -451,6 +461,15 @@ const saveStatus = computed(() => {
   if (!autoSave.value) return '退出时保存'
   return saving.value ? '正在保存…' : '已自动保存'
 })
+const dueDateLabel = computed(() => {
+  const record = selectedRecord.value
+  if (!record || !isTask(record) || !record.dueAt) return '截止日期'
+  const [year, month, day] = record.dueAt.split('-').map(Number)
+  if (!year || !month || !day) return record.dueAt
+  return year === new Date().getFullYear()
+    ? `${month}月${day}日`
+    : `${year}年${month}月${day}日`
+})
 
 const isTask = (record: ProplanRecord): record is ProplanTask => 'completed' in record
 const isTimeline = (record: ProplanRecord): record is ProplanTimelineEntry => 'occurredAt' in record
@@ -520,6 +539,12 @@ const updateProjectDescription = (event: Event): void => {
 const updateRecordTitle = (event: Event): void =>
   store.updateSelectedRecord({ title: eventValue(event) })
 const updateMarkdown = (markdown: string): void => store.updateSelectedRecord({ markdown })
+const openDueDatePicker = (): void => {
+  const input = dueDateInput.value
+  if (!input) return
+  input.focus({ preventScroll: true })
+  input.showPicker()
+}
 const updateDueDate = (event: Event): void =>
   store.updateSelectedRecord({ dueAt: eventValue(event) || null })
 
@@ -634,6 +659,12 @@ onBeforeUnmount(() => {
   --muted: var(--editorColor50);
   --text: var(--editorColor80);
   --accent: var(--themeColor);
+  --record-header-height: 92px;
+  --header-title-size: 20px;
+  --header-title-line-height: 29px;
+  --header-description-size: 12px;
+  --header-description-line-height: 22px;
+  --header-bottom-padding: 12px;
   display: flex;
   position: absolute;
   inset: 0;
@@ -684,17 +715,34 @@ button {
 }
 
 .project-titlebar {
-  height: 54px;
-  flex: 0 0 54px;
+  height: var(--record-header-height);
+  flex: 0 0 var(--record-header-height);
+  box-sizing: border-box;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  padding: 0 12px 9px;
+  padding: 0 15px var(--header-bottom-padding);
 }
 
+.project-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
 .project-titlebar strong {
-  font-size: 17px;
+  font-size: var(--header-title-size);
   font-weight: 680;
+  line-height: var(--header-title-line-height);
+}
+.project-titlebar .icon-button {
+  margin-bottom: var(--header-description-line-height);
+}
+.project-heading .pane-label {
+  color: var(--muted);
+  font-size: var(--header-description-size);
+  font-weight: 400;
+  line-height: var(--header-description-line-height);
 }
 
 .icon-button {
@@ -718,7 +766,6 @@ button {
   height: 15px;
 }
 
-.pane-label,
 .record-toolbar {
   height: 30px;
   flex: 0 0 30px;
@@ -870,21 +917,28 @@ button {
 }
 
 .record-header {
-  height: 88px;
-  flex: 0 0 88px;
+  height: var(--record-header-height);
+  flex: 0 0 var(--record-header-height);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 0 15px 12px;
+  padding: 0 15px var(--header-bottom-padding);
+}
+.record-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 .record-header h2 {
-  margin: 2px 0 0;
-  font-size: 20px;
-  line-height: 24px;
+  margin: 0;
+  font-size: var(--header-title-size);
+  line-height: var(--header-title-line-height);
 }
 .header-eyebrow {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--header-description-size);
+  line-height: var(--header-description-line-height);
 }
 
 .project-name-input,
@@ -896,14 +950,16 @@ button {
   background: transparent;
 }
 .project-name-input {
-  height: 29px;
-  font-size: 20px;
+  height: var(--header-title-line-height);
+  font-size: var(--header-title-size);
   font-weight: 680;
+  line-height: var(--header-title-line-height);
 }
 .project-description-input {
-  height: 22px;
+  height: var(--header-description-line-height);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--header-description-size);
+  line-height: var(--header-description-line-height);
 }
 
 .section-tabs {
@@ -1144,11 +1200,11 @@ button {
   background: transparent;
 }
 .record-properties {
-  min-height: 39px;
+  min-height: 36px;
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding-bottom: 8px;
+  gap: 12px;
+  padding-bottom: 7px;
   color: var(--muted);
   font-size: 11px;
   border-bottom: 1px solid var(--editorColor10);
@@ -1158,17 +1214,56 @@ button {
   align-items: center;
   gap: 6px;
 }
-.record-properties svg {
-  width: 14px;
-}
-.record-properties input[type='date'],
-.record-properties select {
-  height: 26px;
-  padding: 0 5px;
-  border: 1px solid var(--editorColor10);
-  border-radius: 4px;
+.due-date-control {
+  width: max-content;
+  height: 28px;
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
   color: var(--editorColor);
-  background: var(--inputBgColor);
+  background: transparent;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.due-date-control:hover {
+  background: color-mix(in srgb, var(--editorColor10) 55%, transparent);
+}
+.due-date-control:focus-within {
+  box-shadow: 0 0 0 2px var(--themeColor10);
+}
+.due-date-control.empty {
+  color: var(--muted);
+}
+.due-date-control > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  color: var(--muted);
+}
+.due-date-label {
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.due-date-input {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: default;
+  pointer-events: none;
 }
 .completion-control input {
   accent-color: var(--accent);
