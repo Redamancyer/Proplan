@@ -229,7 +229,7 @@ button {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 0 28px calc(var(--header-bottom-padding, 12px) - 1px);
+  padding: 0 28px calc(var(--header-bottom-padding, 12px) - 1px) 9px;
   border-bottom: 1px solid var(--editorColor10);
 }
 
@@ -418,7 +418,6 @@ button {
 @media (max-width: 1040px) {
   .calendar-header {
     padding-right: 18px;
-    padding-left: 18px;
   }
   .calendar-summary {
     display: block;

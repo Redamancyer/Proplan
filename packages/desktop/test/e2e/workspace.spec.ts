@@ -456,6 +456,21 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.calendar-heading h2')).toContainText('年')
     await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
     await expect(page.locator('.weekday-row')).toContainText('一')
+    const calendarHeadingAlignment = await page.evaluate(() => {
+      const title = document.querySelector<HTMLElement>('.calendar-heading h2')
+      const summary = document.querySelector<HTMLElement>('.calendar-summary')
+      const monday = document.querySelector<HTMLElement>('.weekday-row span')
+      const mondayStyle = monday ? getComputedStyle(monday) : null
+      const mondayTextLeft = monday
+        ? monday.getBoundingClientRect().left + Number.parseFloat(mondayStyle?.paddingLeft ?? '0')
+        : -1
+      return {
+        titleGap: title ? Math.abs(title.getBoundingClientRect().left - mondayTextLeft) : -1,
+        summaryGap: summary ? Math.abs(summary.getBoundingClientRect().left - mondayTextLeft) : -1
+      }
+    })
+    expect(calendarHeadingAlignment.titleGap).toBeLessThanOrEqual(1)
+    expect(calendarHeadingAlignment.summaryGap).toBeLessThanOrEqual(1)
 
     settings = await openSettings()
     await settings.getByText(/快捷键|Keybindings/, { exact: true }).click()
