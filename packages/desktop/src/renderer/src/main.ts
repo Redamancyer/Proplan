@@ -6,7 +6,6 @@ import pinia from './store'
 // Element Plus instead of Element UI for Vue 3
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
-import en from 'element-plus/es/locale/lang/en'
 
 // I18n translation system
 import i18nPlugin from './i18n'
@@ -26,10 +25,7 @@ bootstrapRenderer()
 // Create Vue app
 const app: App<Element> = createApp(Main)
 
-// Configure Element Plus with locale
-app.use(ElementPlus, {
-  locale: en
-})
+app.use(ElementPlus)
 
 const envType = window.proplanBoot?.env?.type ?? undefined
 

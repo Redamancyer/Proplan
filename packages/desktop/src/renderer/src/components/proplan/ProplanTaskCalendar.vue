@@ -70,6 +70,12 @@
               class="task-project-mark"
               :style="{ background: item.color }"
             />
+            <span
+              v-if="item.priority"
+              class="task-priority-dot"
+              :style="{ background: priorityColor(item.priority) }"
+              aria-hidden="true"
+            />
             <span class="task-title">
               <span class="task-context">{{ item.context }}</span>
               {{ item.title }}
@@ -84,7 +90,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import type { ProplanCalendarItem, ProplanSection } from '@shared/types/proplan'
+import {
+  PROPLAN_TASK_PRIORITY_COLORS,
+  type ProplanCalendarItem,
+  type ProplanSection,
+  type ProplanTaskPriority
+} from '@shared/types/proplan'
 import {
   formatLocaleDate,
   systemTextForLocale,
@@ -102,6 +113,8 @@ const systemText = (key: SystemTextKey, params: SystemTextParams = {}): string =
   systemTextForLocale(props.locale, key, params)
 const formatSystemDate = (date: Date, options: Intl.DateTimeFormatOptions): string =>
   formatLocaleDate(props.locale, date, options)
+const priorityColor = (priority: ProplanTaskPriority): string =>
+  PROPLAN_TASK_PRIORITY_COLORS[priority]
 
 const emit = defineEmits<{
   selectItem: [itemId: string, kind: ProplanSection]
@@ -384,6 +397,12 @@ button {
   height: 12px;
   flex: 0 0 3px;
   border-radius: 2px;
+}
+.task-priority-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
 }
 .task-title {
   min-width: 0;

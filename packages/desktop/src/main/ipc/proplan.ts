@@ -80,6 +80,8 @@ const stringValue = (value: unknown, fallback = ''): string =>
   typeof value === 'string' ? value : fallback
 
 const nullableString = (value: unknown): string | null => (typeof value === 'string' ? value : null)
+const taskPriority = (value: unknown): ProplanTask['priority'] =>
+  value === 'low' || value === 'high' ? value : 'medium'
 
 const invalidDatabase = (detail: string): never => {
   throw new Error(localized(`Proplan 数据格式无效：${detail}`, `Invalid Proplan data: ${detail}`))
@@ -118,7 +120,8 @@ const normalizeTask = (value: unknown, context: string): ProplanTask => {
     ...memo,
     completed: value.completed === true,
     dueAt: nullableString(value.dueAt),
-    completedAt: nullableString(value.completedAt)
+    completedAt: nullableString(value.completedAt),
+    priority: taskPriority(value.priority)
   }
 }
 

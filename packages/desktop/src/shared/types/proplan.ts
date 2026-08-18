@@ -1,4 +1,11 @@
 export type ProplanSection = 'memos' | 'tasks' | 'timeline'
+export type ProplanTaskPriority = 'low' | 'medium' | 'high'
+
+export const PROPLAN_TASK_PRIORITY_COLORS: Record<ProplanTaskPriority, string> = {
+  low: '#3f8f6b',
+  medium: '#c58a24',
+  high: '#d14f4f'
+}
 
 export interface ProplanCalendarItem {
   id: string
@@ -8,6 +15,7 @@ export interface ProplanCalendarItem {
   context: string
   kind: ProplanSection
   completed?: boolean
+  priority?: ProplanTaskPriority
 }
 
 export interface ProplanMemo {
@@ -22,6 +30,7 @@ export interface ProplanTask extends ProplanMemo {
   completed: boolean
   dueAt: string | null
   completedAt: string | null
+  priority: ProplanTaskPriority
 }
 
 export interface ProplanTimelineEntry extends ProplanMemo {

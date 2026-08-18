@@ -26,6 +26,16 @@ import { checkUpdates } from '../updates'
 import { getNativeThemeSource } from './nativeTheme'
 import type Accessor from './accessor'
 
+const ZOOM_FACTOR_STEP = 0.1
+const MIN_ZOOM_FACTOR = 0.5
+const MAX_ZOOM_FACTOR = 2
+
+const setContentsZoom = (contents: Electron.WebContents, delta?: number): void => {
+  const nextFactor = delta === undefined ? 1 : contents.getZoomFactor() + delta
+  const clampedFactor = Math.max(MIN_ZOOM_FACTOR, Math.min(MAX_ZOOM_FACTOR, nextFactor))
+  contents.setZoomFactor(Number(clampedFactor.toFixed(2)))
+}
+
 class App {
   private mainWindow: BrowserWindow | null = null
   private settingsWindow: BrowserWindow | null = null
@@ -73,12 +83,10 @@ class App {
 
         event.preventDefault()
         if (resetZoom) {
-          contents.setZoomLevel(0)
+          setContentsZoom(contents)
           return
         }
-        const delta = zoomIn ? 0.5 : -0.5
-        const nextLevel = Math.max(-3, Math.min(3, contents.getZoomLevel() + delta))
-        contents.setZoomLevel(nextLevel)
+        setContentsZoom(contents, zoomIn ? ZOOM_FACTOR_STEP : -ZOOM_FACTOR_STEP)
       })
     })
   }
@@ -220,8 +228,7 @@ class App {
       const contents =
         window instanceof BrowserWindow ? window.webContents : this.mainWindow?.webContents
       if (!contents) return
-      const nextLevel = delta === undefined ? 0 : contents.getZoomLevel() + delta
-      contents.setZoomLevel(Math.max(-3, Math.min(3, nextLevel)))
+      setContentsZoom(contents, delta)
     }
     const sendEditorCommand = (
       window: Electron.BaseWindow | undefined,
@@ -287,17 +294,20 @@ class App {
           {
             label: '实际大小',
             accelerator: 'CmdOrCtrl+0',
+            registerAccelerator: false,
             click: (_item, window) => setZoom(window)
           },
           {
             label: '放大',
             accelerator: 'CmdOrCtrl+Plus',
-            click: (_item, window) => setZoom(window, 0.5)
+            registerAccelerator: false,
+            click: (_item, window) => setZoom(window, ZOOM_FACTOR_STEP)
           },
           {
             label: '缩小',
             accelerator: 'CmdOrCtrl+-',
-            click: (_item, window) => setZoom(window, -0.5)
+            registerAccelerator: false,
+            click: (_item, window) => setZoom(window, -ZOOM_FACTOR_STEP)
           },
           { type: 'separator' },
           { role: 'togglefullscreen' }

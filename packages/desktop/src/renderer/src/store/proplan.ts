@@ -15,6 +15,7 @@ import {
 export type ProplanView = ProplanSection | 'globalTasks'
 export type ProplanRecord = ProplanMemo | ProplanTask | ProplanTimelineEntry
 export type GlobalTaskFilter = 'all' | 'today'
+export type ProjectTaskFilter = 'incomplete' | 'completed'
 export type ProplanSaveKind = 'auto' | 'manual'
 
 export interface GlobalTaskItem {
@@ -50,6 +51,24 @@ const sortTimeline = (project: ProplanProject): void => {
   })
 }
 
+const TASK_PRIORITY_ORDER: Record<ProplanTask['priority'], number> = {
+  high: 0,
+  medium: 1,
+  low: 2
+}
+
+const compareTasks = (a: ProplanTask, b: ProplanTask, locale: string): number => {
+  const priorityDifference = TASK_PRIORITY_ORDER[a.priority] - TASK_PRIORITY_ORDER[b.priority]
+  if (priorityDifference !== 0) return priorityDifference
+  if (a.dueAt !== b.dueAt) {
+    if (!a.dueAt) return 1
+    if (!b.dueAt) return -1
+    const dueDateDifference = a.dueAt.localeCompare(b.dueAt)
+    if (dueDateDifference !== 0) return dueDateDifference
+  }
+  return new Intl.Collator(locale, { sensitivity: 'base', numeric: true }).compare(a.title, b.title)
+}
+
 const moveBefore = <T>(items: T[], sourceIndex: number, targetIndex: number): void => {
   if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return
   const [item] = items.splice(sourceIndex, 1)
@@ -70,6 +89,7 @@ export const useProplanStore = defineStore('proplan', () => {
   const selectedRecordId = ref<string | null>(null)
   const view = ref<ProplanView>('memos')
   const globalTaskFilter = ref<GlobalTaskFilter>('all')
+  const projectTaskFilter = ref<ProjectTaskFilter>('incomplete')
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   const lastSavedSnapshot = ref('')
   const savedRecordTimes = new Map<string, string>()
@@ -94,24 +114,30 @@ export const useProplanStore = defineStore('proplan', () => {
     () => projects.value.find((project) => project.id === selectedProjectId.value) ?? null
   )
   const allGlobalTasks = computed<GlobalTaskItem[]>(() => {
-    const positions = new Map(database.value.globalTaskOrder.map((id, index) => [id, index]))
     return projects.value
       .flatMap((project) =>
-        project.tasks.map((task) => ({
-          projectId: project.id,
-          projectName: project.name,
-          projectColor: project.color,
-          task
-        }))
-      )
-      .sort(
-        (a, b) =>
-          (positions.get(a.task.id) ?? Number.MAX_SAFE_INTEGER) -
-          (positions.get(b.task.id) ?? Number.MAX_SAFE_INTEGER)
+        [...project.tasks]
+          .sort((a, b) => compareTasks(a, b, preferences.language))
+          .map((task) => ({
+            projectId: project.id,
+            projectName: project.name,
+            projectColor: project.color,
+            task
+          }))
       )
   })
   const globalTasks = computed<GlobalTaskItem[]>(() =>
     allGlobalTasks.value.filter(({ task }) => !task.completed)
+  )
+  const incompleteProjectTasks = computed<ProplanTask[]>(() =>
+    [...(selectedProject.value?.tasks ?? [])]
+      .filter((task) => !task.completed)
+      .sort((a, b) => compareTasks(a, b, preferences.language))
+  )
+  const completedProjectTasks = computed<ProplanTask[]>(() =>
+    [...(selectedProject.value?.tasks ?? [])]
+      .filter((task) => task.completed)
+      .sort((a, b) => compareTasks(a, b, preferences.language))
   )
 
   const records = computed<ProplanRecord[]>(() => {
@@ -121,6 +147,11 @@ export const useProplanStore = defineStore('proplan', () => {
         ? tasks.filter((task) => task.dueAt === currentDateKey.value)
         : tasks
     }
+    if (view.value === 'tasks') {
+      return projectTaskFilter.value === 'completed'
+        ? completedProjectTasks.value
+        : incompleteProjectTasks.value
+    }
     return selectedProject.value?.[view.value] ?? []
   })
 
@@ -128,6 +159,9 @@ export const useProplanStore = defineStore('proplan', () => {
     if (!selectedRecordId.value) return null
     if (view.value === 'globalTasks') {
       return globalTasks.value.find(({ task }) => task.id === selectedRecordId.value)?.task ?? null
+    }
+    if (view.value === 'tasks') {
+      return selectedProject.value?.tasks.find((task) => task.id === selectedRecordId.value) ?? null
     }
     return records.value.find((record) => record.id === selectedRecordId.value) ?? null
   })
@@ -207,6 +241,7 @@ export const useProplanStore = defineStore('proplan', () => {
     selectedRecordId.value = null
     view.value = 'memos'
     globalTaskFilter.value = 'all'
+    projectTaskFilter.value = 'incomplete'
     loaded.value = true
     saveError.value = ''
   }
@@ -230,9 +265,18 @@ export const useProplanStore = defineStore('proplan', () => {
     selectedRecordId.value = null
   }
 
+  const setProjectTaskFilter = (filter: ProjectTaskFilter): void => {
+    projectTaskFilter.value = filter
+    selectedRecordId.value = null
+  }
+
   const selectRecord = (recordId: string): void => {
     const availableRecords =
-      view.value === 'globalTasks' ? globalTasks.value.map(({ task }) => task) : records.value
+      view.value === 'globalTasks'
+        ? globalTasks.value.map(({ task }) => task)
+        : view.value === 'tasks'
+          ? selectedProject.value?.tasks ?? []
+          : records.value
     const record = availableRecords.find((item) => item.id === recordId)
     selectedRecordId.value = record?.id ?? null
     if (record) showRecordSavedTime(record.id)
@@ -309,12 +353,14 @@ export const useProplanStore = defineStore('proplan', () => {
     const base = { id: newId(), markdown: '', createdAt: timestamp, updatedAt: timestamp }
     let record: ProplanRecord
     if (section === 'tasks') {
+      projectTaskFilter.value = 'incomplete'
       record = {
         ...base,
         title: systemTextForLocale(preferences.language, 'defaultTaskTitle'),
         completed: false,
         dueAt: null,
-        completedAt: null
+        completedAt: null,
+        priority: 'medium'
       }
       project.tasks.unshift(record)
       database.value.globalTaskOrder.unshift(record.id)
@@ -367,33 +413,14 @@ export const useProplanStore = defineStore('proplan', () => {
 
   const reorderRecords = (sourceId: string, targetId: string): void => {
     const project = selectedProject.value
-    if (!project || (view.value !== 'memos' && view.value !== 'tasks')) return
-    const list = project[view.value]
+    if (!project || view.value !== 'memos') return
+    const list = project.memos
     moveBefore(
       list,
       list.findIndex((record) => record.id === sourceId),
       list.findIndex((record) => record.id === targetId)
     )
     touchProject(project)
-  }
-
-  const reorderGlobalTasks = (sourceId: string, targetId: string): void => {
-    const visibleIds = records.value.map((record) => record.id)
-    const sourceVisibleIndex = visibleIds.indexOf(sourceId)
-    const targetVisibleIndex = visibleIds.indexOf(targetId)
-    if (sourceVisibleIndex < 0 || targetVisibleIndex < 0 || sourceVisibleIndex === targetVisibleIndex) {
-      return
-    }
-    const visiblePositions = database.value.globalTaskOrder
-      .map((id, index) => (visibleIds.includes(id) ? index : -1))
-      .filter((index) => index >= 0)
-    const reorderedVisible = [...visibleIds]
-    moveBefore(reorderedVisible, sourceVisibleIndex, targetVisibleIndex)
-    visiblePositions.forEach((position, index) => {
-      const taskId = reorderedVisible[index]
-      if (taskId) database.value.globalTaskOrder[position] = taskId
-    })
-    scheduleSave()
   }
 
   const toggleTask = (taskId: string): void => {
@@ -449,13 +476,17 @@ export const useProplanStore = defineStore('proplan', () => {
     selectedRecordProject,
     records,
     globalTasks,
+    incompleteProjectTasks,
+    completedProjectTasks,
     globalTaskFilter,
+    projectTaskFilter,
     view,
     initialize,
     reloadFromDisk,
     selectProject,
     setView,
     setGlobalTaskFilter,
+    setProjectTaskFilter,
     selectRecord,
     clearSelectedRecord,
     refreshCurrentDate,
@@ -466,7 +497,6 @@ export const useProplanStore = defineStore('proplan', () => {
     updateSelectedRecord,
     reorderProjects,
     reorderRecords,
-    reorderGlobalTasks,
     toggleTask,
     deleteRecord,
     deleteSelectedRecord,

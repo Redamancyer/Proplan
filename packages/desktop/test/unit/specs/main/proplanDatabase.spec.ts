@@ -55,6 +55,7 @@ const sampleDatabase = (): ProplanDatabase => ({
           completed: true,
           dueAt: '2026-08-20',
           completedAt: '2026-08-17T01:00:00.000Z',
+          priority: 'high',
           createdAt: '2026-08-17T00:00:00.000Z',
           updatedAt: '2026-08-17T01:00:00.000Z'
         }
@@ -126,5 +127,14 @@ describe('Proplan SQLite database', () => {
 
     await fs.writeJson(legacyPath, { version: 1, projects: [] })
     await expect(loadDatabase()).resolves.toEqual(initial)
+  })
+
+  it('defaults tasks from older JSON data to medium priority', async() => {
+    const legacy = sampleDatabase()
+    delete (legacy.projects[0].tasks[0] as Partial<(typeof legacy.projects)[number]['tasks'][number]>).priority
+    await fs.writeJson(path.join(root, LEGACY_PROPLAN_DATA_FILENAME), legacy)
+
+    const loaded = await loadDatabase()
+    expect(loaded.projects[0]?.tasks[0]?.priority).toBe('medium')
   })
 })

@@ -32,6 +32,8 @@ describe('supported application languages', () => {
     expect(systemTextForLocale('zh-CN', 'addProjectDescription')).toBe('添加项目描述')
     expect(systemTextForLocale('en', 'monthItems', { count: 2 })).toBe('2 this month')
     expect(systemTextForLocale('zh-CN', 'monthItems', { count: 2 })).toBe('本月 2 项')
+    expect(systemTextForLocale('zh-CN', 'priorityHigh')).toBe('高')
+    expect(systemTextForLocale('en', 'priorityMedium')).toBe('Medium')
   })
 })
 

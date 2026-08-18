@@ -160,13 +160,119 @@
           v-if="selectedProject && view !== 'globalTasks'"
           class="icon-button"
           :title="newRecordLabel"
-          @click="store.createRecord()"
+          @click="createRecord"
         >
           <Plus />
         </button>
       </div>
 
       <div
+        v-if="selectedProject && view === 'tasks'"
+        class="task-list-stage"
+      >
+        <div class="record-list incomplete-task-list">
+          <TransitionGroup name="list-reorder">
+            <button
+              v-for="record in incompleteProjectTasks"
+              :key="record.id"
+              class="record-row"
+              :class="{ active: record.id === selectedRecordId }"
+              draggable="false"
+              @click="selectProjectTask(record.id, false)"
+              @contextmenu.prevent.stop="openRecordContextMenu(record, $event)"
+            >
+              <span
+                class="task-check"
+                @click.stop="store.toggleTask(record.id)"
+              />
+              <span class="record-copy">
+                <span class="row-title">{{ record.title }}</span>
+                <span class="row-meta">{{ recordMeta(record) }}</span>
+              </span>
+              <span
+                class="task-priority-dot"
+                :style="{ background: priorityColor(record.priority) }"
+                :title="priorityLabel(record.priority)"
+                aria-hidden="true"
+              />
+            </button>
+          </TransitionGroup>
+
+          <div
+            v-if="incompleteProjectTasks.length === 0"
+            class="empty-records"
+          >
+            <Finished />
+            <span>{{ systemText('noIncompleteTasks') }}</span>
+          </div>
+        </div>
+
+        <section
+          class="completed-task-drawer"
+          :class="{ expanded: completedDrawerExpanded }"
+        >
+          <button
+            class="completed-drawer-toggle"
+            :aria-expanded="completedDrawerExpanded"
+            :aria-label="systemText('completedTasks')"
+            @click="toggleCompletedDrawer"
+          >
+            <CircleCheck class="completed-drawer-icon" />
+            <span>{{ systemText('completedTasks') }}</span>
+            <span class="completed-task-count">{{ completedProjectTasks.length }}</span>
+            <ArrowDown
+              v-if="completedDrawerExpanded"
+              class="drawer-arrow-down"
+            />
+            <ArrowUp
+              v-else
+              class="drawer-arrow-up"
+            />
+          </button>
+
+          <div class="record-list completed-task-list">
+            <TransitionGroup name="list-reorder">
+              <button
+                v-for="record in completedProjectTasks"
+                :key="record.id"
+                class="record-row"
+                :class="{ active: record.id === selectedRecordId }"
+                draggable="false"
+                @click="selectProjectTask(record.id, true)"
+                @contextmenu.prevent.stop="openRecordContextMenu(record, $event)"
+              >
+                <span
+                  class="task-check checked"
+                  @click.stop="store.toggleTask(record.id)"
+                >
+                  <Check />
+                </span>
+                <span class="record-copy">
+                  <span class="row-title completed">{{ record.title }}</span>
+                  <span class="row-meta">{{ recordMeta(record) }}</span>
+                </span>
+                <span
+                  class="task-priority-dot"
+                  :style="{ background: priorityColor(record.priority) }"
+                  :title="priorityLabel(record.priority)"
+                  aria-hidden="true"
+                />
+              </button>
+            </TransitionGroup>
+
+            <div
+              v-if="completedProjectTasks.length === 0"
+              class="empty-records"
+            >
+              <Finished />
+              <span>{{ systemText('noCompletedTasks') }}</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div
+        v-else
         class="record-list"
         :class="{ 'timeline-list': view === 'timeline' }"
       >
@@ -217,6 +323,13 @@
                 <template v-if="view === 'globalTasks'">{{ taskProjectName(record.id) }} · </template>{{ recordMeta(record) }}
               </span>
             </span>
+            <span
+              v-if="isTask(record)"
+              class="task-priority-dot"
+              :style="{ background: priorityColor(record.priority) }"
+              :title="priorityLabel(record.priority)"
+              aria-hidden="true"
+            />
           </button>
         </TransitionGroup>
 
@@ -261,50 +374,69 @@
             v-if="isTask(selectedRecord) || isTimeline(selectedRecord)"
             class="record-properties no-drag"
           >
-            <label
+            <el-date-picker
               v-if="isTask(selectedRecord)"
-              class="due-date-control"
+              class="proplan-date-picker task-date-picker"
+              style="width: auto; --el-date-editor-width: auto"
               :class="{ empty: !selectedRecord.dueAt }"
+              :model-value="selectedRecord.dueAt"
+              type="date"
+              format="YYYY/MM/DD"
+              value-format="YYYY-MM-DD"
+              :placeholder="systemText('dueDate')"
+              :aria-label="systemText('dueDate')"
               :title="systemText('setDueDate')"
-              @click.prevent="openDueDatePicker"
+              :editable="false"
+              @update:model-value="updateDueDate"
+            />
+            <el-select
+              v-if="isTask(selectedRecord)"
+              class="task-priority-select"
+              :class="{ 'is-zh': language.toLowerCase().startsWith('zh') }"
+              popper-class="proplan-priority-popper"
+              :model-value="selectedRecord.priority"
+              :aria-label="systemText('priority')"
+              :title="systemText('priority')"
+              @update:model-value="updateTaskPriority"
             >
-              <Calendar aria-hidden="true" />
-              <span
-                class="due-date-label"
-                aria-hidden="true"
-              >{{ dueDateLabel }}</span>
-              <input
-                ref="dueDateInput"
-                class="due-date-input"
-                type="date"
-                :lang="language"
-                :value="selectedRecord.dueAt ?? ''"
-                :aria-label="systemText('dueDate')"
-                @change="updateDueDate"
+              <template #prefix>
+                <span
+                  class="priority-dot"
+                  :style="{ background: priorityColor(selectedRecord.priority) }"
+                />
+              </template>
+              <el-option
+                v-for="option in priorityOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
               >
-            </label>
-            <label
+                <span class="priority-option">
+                  <span
+                    class="priority-dot"
+                    :style="{ background: option.color }"
+                  />
+                  <span>{{ option.label }}</span>
+                </span>
+              </el-option>
+            </el-select>
+            <el-date-picker
               v-else
-              class="due-date-control"
+              class="proplan-date-picker timeline-date-picker"
+              style="width: auto; --el-date-editor-width: auto"
               :class="{ empty: !selectedRecord.occurredAt }"
+              :model-value="dateTimeLocalValue(selectedRecord.occurredAt)"
+              type="datetime"
+              format="YYYY/MM/DD HH:mm"
+              value-format="YYYY-MM-DDTHH:mm"
+              time-format="HH:mm"
+              :placeholder="systemText('dateTime')"
+              :aria-label="systemText('dateTime')"
               :title="systemText('setDateTime')"
-              @click.prevent="openRecordDatePicker"
-            >
-              <Calendar aria-hidden="true" />
-              <span
-                class="due-date-label"
-                aria-hidden="true"
-              >{{ timelineDateLabel }}</span>
-              <input
-                ref="recordDateInput"
-                class="due-date-input"
-                type="datetime-local"
-                :lang="language"
-                :value="dateTimeLocalValue(selectedRecord.occurredAt)"
-                :aria-label="systemText('dateTime')"
-                @change="updateTimelineDate"
-              >
-            </label>
+              :editable="false"
+              :clearable="false"
+              @update:model-value="updateTimelineDate"
+            />
             <span
               v-if="view === 'globalTasks'"
               class="project-chip"
@@ -377,11 +509,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
-  Calendar,
+  ArrowDown,
+  ArrowUp,
   Check,
+  CircleCheck,
   Close,
   Delete,
   Edit,
@@ -389,11 +523,13 @@ import {
   FolderOpened,
   Plus
 } from '@element-plus/icons-vue'
-import type {
-  ProplanCalendarItem,
-  ProplanSection,
-  ProplanTask,
-  ProplanTimelineEntry
+import {
+  PROPLAN_TASK_PRIORITY_COLORS,
+  type ProplanCalendarItem,
+  type ProplanSection,
+  type ProplanTask,
+  type ProplanTaskPriority,
+  type ProplanTimelineEntry
 } from '@shared/types/proplan'
 import { useProplanStore, type ProplanRecord } from '@/store/proplan'
 import { usePreferencesStore } from '@/store/preferences'
@@ -416,10 +552,25 @@ const systemText = (key: SystemTextKey, params: SystemTextParams = {}): string =
   systemTextForLocale(language.value, key, params)
 const formatSystemDate = (date: Date, options: Intl.DateTimeFormatOptions): string =>
   formatLocaleDate(language.value, date, options)
+const priorityLabel = (priority: ProplanTaskPriority): string =>
+  systemText(
+    priority === 'low' ? 'priorityLow' : priority === 'high' ? 'priorityHigh' : 'priorityMedium'
+  )
+const priorityColor = (priority: ProplanTaskPriority): string =>
+  PROPLAN_TASK_PRIORITY_COLORS[priority]
+const priorityOptions = computed(() =>
+  (['low', 'medium', 'high'] as const).map((value) => ({
+    value,
+    label: priorityLabel(value),
+    color: priorityColor(value)
+  }))
+)
 const {
   projects,
   records,
   globalTasks,
+  incompleteProjectTasks,
+  completedProjectTasks,
   globalTaskFilter,
   selectedProject,
   selectedProjectId,
@@ -436,8 +587,7 @@ const {
 } = storeToRefs(store)
 const projectWidth = ref(PROJECT_MIN)
 const recordWidth = ref(RECORD_MIN)
-const dueDateInput = ref<HTMLInputElement | null>(null)
-const recordDateInput = ref<HTMLInputElement | null>(null)
+const completedDrawerExpanded = ref(false)
 const draggedProjectId = ref<string | null>(null)
 const draggedRecordId = ref<string | null>(null)
 const projectDragTargetId = ref<string | null>(null)
@@ -458,7 +608,8 @@ const globalCalendarItems = computed<ProplanCalendarItem[]>(() =>
     date: task.dueAt,
     color: projectColor,
     context: projectName,
-    kind: 'tasks'
+    kind: 'tasks',
+    priority: task.priority
   }))
 )
 const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
@@ -480,7 +631,8 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
       color: project.color,
       context: systemText('task'),
       kind: 'tasks' as const,
-      completed: task.completed
+      completed: task.completed,
+      priority: task.priority
     })),
     ...project.timeline.map((entry) => ({
       id: entry.id,
@@ -492,7 +644,11 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
     }))
   ]
 })
-const recordCountLabel = computed(() => systemText('itemCount', { count: records.value.length }))
+const recordCountLabel = computed(() =>
+  systemText('itemCount', {
+    count: view.value === 'tasks' ? incompleteProjectTasks.value.length : records.value.length
+  })
+)
 const newRecordLabel = computed(() => {
   if (view.value === 'tasks' || view.value === 'globalTasks') return systemText('newTask')
   if (view.value === 'timeline') return systemText('newTimelineEntry')
@@ -502,7 +658,7 @@ const emptyRecordLabel = computed(() => {
   if (view.value === 'globalTasks') {
     return globalTaskFilter.value === 'today' ? systemText('noTodayTasks') : systemText('noTasks')
   }
-  if (view.value === 'tasks') return systemText('noTasks')
+  if (view.value === 'tasks') return systemText('noIncompleteTasks')
   if (view.value === 'timeline') return systemText('noTimelineEntries')
   return systemText('noMemos')
 })
@@ -532,26 +688,7 @@ const saveStatus = computed(() => {
   if (!autoSave.value) return systemText('saveOnExit')
   return systemText('noUnsavedChanges')
 })
-const canReorderRecords = computed(
-  () => view.value === 'memos' || view.value === 'tasks' || view.value === 'globalTasks'
-)
-const dueDateLabel = computed(() => {
-  const record = selectedRecord.value
-  if (!record || !isTask(record) || !record.dueAt) return systemText('dueDate')
-  const [year, month, day] = record.dueAt.split('-').map(Number)
-  if (!year || !month || !day) return record.dueAt
-  return formatSystemDate(new Date(year, month - 1, day), {
-    ...(year === new Date().getFullYear() ? {} : { year: 'numeric' }),
-    month: 'short',
-    day: 'numeric'
-  })
-})
-const timelineDateLabel = computed(() => {
-  const record = selectedRecord.value
-  if (!record || !isTimeline(record) || !record.occurredAt) return systemText('dateTime')
-  return formatDateTime(record.occurredAt)
-})
-
+const canReorderRecords = computed(() => view.value === 'memos')
 const isTask = (record: ProplanRecord): record is ProplanTask => 'completed' in record
 const isTimeline = (record: ProplanRecord): record is ProplanTimelineEntry => 'occurredAt' in record
 
@@ -563,6 +700,26 @@ const createProject = (): void => {
     input?.select()
   })
 }
+
+const createRecord = (): void => {
+  if (view.value === 'tasks') completedDrawerExpanded.value = false
+  store.createRecord()
+}
+
+const toggleCompletedDrawer = (): void => {
+  completedDrawerExpanded.value = !completedDrawerExpanded.value
+  store.setProjectTaskFilter(completedDrawerExpanded.value ? 'completed' : 'incomplete')
+}
+
+const selectProjectTask = (recordId: string, completed: boolean): void => {
+  store.setProjectTaskFilter(completed ? 'completed' : 'incomplete')
+  store.selectRecord(recordId)
+}
+
+watch([selectedProjectId, view], () => {
+  completedDrawerExpanded.value = false
+  if (view.value === 'tasks') store.setProjectTaskFilter('incomplete')
+})
 
 const closeRecordContextMenu = (): void => {
   recordContextMenu.value = null
@@ -657,8 +814,7 @@ const previewRecordOrder = (targetId: string, event: DragEvent): void => {
   const sourceId = draggedRecordId.value
   if (!sourceId || sourceId === targetId || recordDragTargetId.value === targetId) return
   recordDragTargetId.value = targetId
-  if (view.value === 'globalTasks') store.reorderGlobalTasks(sourceId, targetId)
-  else store.reorderRecords(sourceId, targetId)
+  store.reorderRecords(sourceId, targetId)
 }
 const endDrag = (): void => {
   draggedProjectId.value = null
@@ -678,22 +834,11 @@ const updateProjectDescription = (event: Event): void => {
 const updateRecordTitle = (event: Event): void =>
   store.updateSelectedRecord({ title: eventValue(event) })
 const updateMarkdown = (markdown: string): void => store.updateSelectedRecord({ markdown })
-const openDueDatePicker = (): void => {
-  const input = dueDateInput.value
-  if (!input) return
-  input.focus({ preventScroll: true })
-  input.showPicker()
-}
-const updateDueDate = (event: Event): void =>
-  store.updateSelectedRecord({ dueAt: eventValue(event) || null })
-const openRecordDatePicker = (): void => {
-  const input = recordDateInput.value
-  if (!input) return
-  input.focus({ preventScroll: true })
-  input.showPicker()
-}
-const updateTimelineDate = (event: Event): void => {
-  const value = eventValue(event)
+const updateDueDate = (value: string | null): void =>
+  store.updateSelectedRecord({ dueAt: value || null })
+const updateTaskPriority = (priority: ProplanTaskPriority): void =>
+  store.updateSelectedRecord({ priority })
+const updateTimelineDate = (value: string | null): void => {
   if (value) store.updateSelectedRecord({ occurredAt: value })
 }
 
@@ -934,6 +1079,7 @@ button {
   flex: 0 0 30px;
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 0 12px;
   color: var(--muted);
   font-size: 11px;
@@ -989,7 +1135,8 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .list-reorder-move {
+  .list-reorder-move,
+  .completed-task-drawer {
     transition-duration: 0.01ms;
   }
 }
@@ -1173,10 +1320,90 @@ button {
 }
 
 .record-toolbar {
-  justify-content: space-between;
+  justify-content: flex-start;
+}
+.record-toolbar > .icon-button {
+  margin-left: auto;
 }
 .record-list {
   flex: 1;
+}
+.task-list-stage {
+  min-height: 0;
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+.task-list-stage > .record-list {
+  height: 100%;
+  box-sizing: border-box;
+}
+.incomplete-task-list {
+  padding-bottom: 57px;
+}
+.completed-task-drawer {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% - 49px);
+  right: 0;
+  left: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--editorBgColor) 96%, var(--editorColor) 4%);
+  box-shadow: 0 -8px 20px transparent;
+  transition:
+    top 260ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 260ms ease;
+}
+.completed-task-drawer.expanded {
+  top: 0;
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.08);
+}
+.completed-drawer-toggle {
+  width: calc(100% - 14px);
+  height: 34px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 7px 7px 0;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--sideBarColor);
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+}
+.completed-drawer-toggle:hover {
+  color: var(--text);
+  background: var(--editorColor10);
+}
+.completed-drawer-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+.completed-drawer-toggle .drawer-arrow-up,
+.completed-drawer-toggle .drawer-arrow-down {
+  width: 13px;
+  height: 13px;
+}
+.completed-task-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+.completed-task-list {
+  flex: 1;
+  padding-top: 7px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .completed-task-drawer {
+    transition-duration: 0.01ms;
+  }
 }
 .record-row {
   min-height: 58px;
@@ -1215,6 +1442,16 @@ button {
 }
 .task-check svg {
   width: 11px;
+}
+.task-priority-dot,
+.priority-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+}
+.task-priority-dot {
+  margin-right: 3px;
 }
 
 .timeline-list .record-row {
@@ -1392,61 +1629,128 @@ button {
   font-size: 11px;
   border-bottom: 1px solid var(--editorColor10);
 }
-.record-properties label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+:deep(.proplan-date-picker) {
+  --el-input-bg-color: transparent;
+  --el-input-border-color: transparent;
+  --el-input-hover-border-color: transparent;
+  --el-input-focus-border-color: transparent;
+  height: 28px;
+  width: auto !important;
+  flex: 0 0 auto;
+  background: transparent;
 }
-.due-date-control {
-  width: max-content;
+:deep(.proplan-date-picker .el-input__wrapper) {
   height: 28px;
   box-sizing: border-box;
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  padding: 0 7px;
-  overflow: hidden;
+  padding: 0 3px;
   border: 0;
-  border-radius: 5px;
-  color: var(--editorColor);
-  background: transparent;
-  transition: background-color 120ms ease, box-shadow 120ms ease;
+  border-radius: 3px;
+  background: transparent !important;
+  box-shadow: none !important;
+  flex-grow: 0;
 }
-.due-date-control:hover {
-  background: color-mix(in srgb, var(--editorColor10) 55%, transparent);
+:deep(.proplan-date-picker .el-input__wrapper:hover) {
+  background: color-mix(in srgb, var(--editorColor10) 55%, transparent) !important;
+  box-shadow: none !important;
 }
-.due-date-control:focus-within {
-  box-shadow: 0 0 0 2px var(--themeColor10);
+:deep(.proplan-date-picker .el-input__wrapper.is-focus) {
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0;
 }
-.due-date-control.empty {
-  color: var(--muted);
+:deep(.proplan-date-picker .el-input__prefix) {
+  margin-right: 3px;
 }
-.due-date-control > svg {
+:deep(.proplan-date-picker .el-input__prefix-inner > :last-child) {
+  margin-right: 0;
+}
+:deep(.proplan-date-picker .el-input__suffix-inner > :first-child) {
+  margin-left: 3px;
+}
+:deep(.proplan-date-picker .el-input__prefix-inner > svg),
+:deep(.proplan-date-picker .el-input__suffix-inner > svg) {
   width: 13px;
   height: 13px;
-  flex: 0 0 13px;
   color: var(--muted);
 }
-.due-date-label {
-  overflow: hidden;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.due-date-input {
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  inset: 0;
-  margin: 0;
+:deep(.proplan-date-picker .el-input__inner) {
+  min-width: 0;
+  height: 28px;
   padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  flex: 0 1 auto;
+  color: var(--editorColor);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+:deep(.task-date-picker .el-input__inner) {
+  width: 10ch;
+}
+:deep(.task-date-picker.empty .el-input__inner) {
+  width: 8ch;
+}
+:deep(.timeline-date-picker .el-input__inner) {
+  width: 16ch;
+}
+:deep(.proplan-date-picker.empty .el-input__inner) {
+  color: var(--muted);
+}
+:deep(.task-priority-select) {
+  --el-select-border-color-hover: transparent;
+  width: 74px;
+  flex: 0 0 74px;
+}
+:deep(.task-priority-select.is-zh) {
+  width: 58px;
+  flex-basis: 58px;
+}
+:deep(.task-priority-select .el-select__wrapper) {
+  min-height: 28px;
+  gap: 3px;
+  padding: 0 4px;
   border: 0;
-  opacity: 0;
-  cursor: default;
-  pointer-events: none;
+  border-radius: 3px;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+:deep(.task-priority-select .el-select__wrapper:hover) {
+  background: color-mix(in srgb, var(--editorColor10) 55%, transparent) !important;
+}
+:deep(.task-priority-select .el-select__wrapper.is-focused) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+:deep(.task-priority-select .el-select__selected-item) {
+  color: var(--editorColor);
+  font-size: 11px;
+}
+:deep(.task-priority-select .el-select__selection) {
+  gap: 3px;
+}
+:deep(.task-priority-select .el-select__prefix) {
+  margin-right: 0;
+}
+:deep(.task-priority-select .el-select__suffix) {
+  margin-left: 0;
+}
+:global(.proplan-priority-popper .priority-option) {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+:global(.proplan-priority-popper .el-select-dropdown__item) {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 26px;
+}
+:global(.proplan-priority-popper .priority-dot) {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
 }
 .project-chip {
   margin-left: auto;

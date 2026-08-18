@@ -28,7 +28,7 @@ test.describe('Check Launch Proplan', () => {
       BrowserWindow.getAllWindows()[0]?.webContents.send('mt::about-dialog')
     })
     await expect(page.locator('.el-dialog')).toContainText('关于 Proplan')
-    await expect(page.locator('.about-dialog')).toContainText('版本 v1.0.7')
+    await expect(page.locator('.about-dialog')).toContainText('版本 v1.0.11')
     await expect(page.locator('.about-dialog')).toContainText('Redamancyer')
     await expect(page.locator('.upstream-attribution')).toContainText('基于 MarkText 与 Muya 开发')
     await page.keyboard.press('Escape')

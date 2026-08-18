@@ -33,6 +33,7 @@ interface RecordRow {
   completed: number
   due_at: string | null
   completed_at: string | null
+  priority: ProplanTask['priority']
   occurred_at: string | null
   created_at: string
   updated_at: string
@@ -68,6 +69,7 @@ const openDatabase = (databasePath: string): DatabaseSync => {
       completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
       due_at TEXT,
       completed_at TEXT,
+      priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
       occurred_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -78,8 +80,16 @@ const openDatabase = (databasePath: string): DatabaseSync => {
       ON records(project_id, kind, position);
     CREATE INDEX IF NOT EXISTS records_open_tasks_due_at
       ON records(kind, completed, due_at);
-    PRAGMA user_version = 1;
   `)
+  const recordColumns = database.prepare('PRAGMA table_info(records)').all() as Array<{
+    name: string
+  }>
+  if (!recordColumns.some((column) => column.name === 'priority')) {
+    database.exec(
+      "ALTER TABLE records ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high'))"
+    )
+  }
+  database.exec('PRAGMA user_version = 2')
   return database
 }
 
@@ -121,8 +131,8 @@ export const writeProplanDatabase = (
     const insertRecord = database.prepare(`
       INSERT INTO records (
         id, project_id, kind, title, markdown, completed, due_at, completed_at,
-        occurred_at, created_at, updated_at, position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        occurred_at, priority, created_at, updated_at, position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     withTransaction(database, () => {
@@ -154,6 +164,7 @@ export const writeProplanDatabase = (
               task?.dueAt ?? null,
               task?.completedAt ?? null,
               timeline?.occurredAt ?? null,
+              task?.priority ?? 'medium',
               record.createdAt,
               record.updatedAt,
               position
@@ -215,7 +226,8 @@ export const readProplanDatabase = (databasePath: string): ProplanDatabase => {
             ...baseRecord(record),
             completed: record.completed === 1,
             dueAt: record.due_at,
-            completedAt: record.completed_at
+            completedAt: record.completed_at,
+            priority: record.priority
           })),
         timeline: rows
           .filter((record) => record.kind === 'timeline')
