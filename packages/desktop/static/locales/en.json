@@ -515,6 +515,7 @@
       },
       "misc": {
         "title": "Miscellaneous",
+        "zoomFactor": "Zoom",
         "language": {
           "title": "Language",
           "english": "English",

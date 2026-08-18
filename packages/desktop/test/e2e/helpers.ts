@@ -22,12 +22,15 @@ process.on('exit', () => {
   }
 })
 
-export const launchElectron = async(userArgs: string[] = []): Promise<{
+export const launchElectron = async(
+  userArgs: string[] = [],
+  existingUserDataDir?: string
+): Promise<{
   app: ElectronApplication
   page: Page
 }> => {
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'proplan-e2e-'))
-  createdTempDirs.add(userDataDir)
+  const userDataDir = existingUserDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'proplan-e2e-'))
+  if (!existingUserDataDir) createdTempDirs.add(userDataDir)
   const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
   )

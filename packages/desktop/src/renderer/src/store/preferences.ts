@@ -4,6 +4,7 @@ import { setLanguage } from '../i18n'
 export interface PreferencesState {
   autoSave: boolean
   autoSaveDelay: number
+  zoomFactor: number
   titleBarStyle: 'custom' | 'native' | string
   language: string
   editorFontFamily: string
@@ -47,6 +48,7 @@ export interface PreferencesState {
 const defaults = (): PreferencesState => ({
   autoSave: false,
   autoSaveDelay: 5000,
+  zoomFactor: 1,
   titleBarStyle: 'custom',
   language: 'en',
   editorFontFamily: 'Open Sans',
@@ -87,6 +89,8 @@ const defaults = (): PreferencesState => ({
   spellcheckerLanguage: 'en-US'
 })
 
+const initializedPreferenceStores = new WeakSet<object>()
+
 export const usePreferencesStore = defineStore('preferences', {
   state: defaults,
   getters: {
@@ -103,13 +107,16 @@ export const usePreferencesStore = defineStore('preferences', {
       if (this.language !== oldLanguage) setLanguage(this.language)
     },
     ASK_FOR_USER_PREFERENCE(): void {
+      if (!initializedPreferenceStores.has(this)) {
+        initializedPreferenceStores.add(this)
+        window.electron.ipcRenderer.on('mt::user-preference', (_event, preferences) => {
+          this.SET_USER_PREFERENCE(preferences as Partial<PreferencesState>)
+        })
+        window.electron.ipcRenderer.on('language-changed', (_event, language) => {
+          if (typeof language === 'string') this.language = language
+        })
+      }
       window.electron.ipcRenderer.send('mt::ask-for-user-preference')
-      window.electron.ipcRenderer.on('mt::user-preference', (_event, preferences) => {
-        this.SET_USER_PREFERENCE(preferences as Partial<PreferencesState>)
-      })
-      window.electron.ipcRenderer.on('language-changed', (_event, language) => {
-        if (typeof language === 'string') this.language = language
-      })
     },
     SET_SINGLE_PREFERENCE({ type, value }: { type: keyof PreferencesState; value: unknown }): void {
       ;(this as unknown as Record<string, unknown>)[type] = value

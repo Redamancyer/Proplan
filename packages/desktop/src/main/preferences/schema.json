@@ -1,6 +1,7 @@
 {
   "autoSave": { "type": "boolean", "default": false },
   "autoSaveDelay": { "type": "number", "minimum": 1000, "default": 5000 },
+  "zoomFactor": { "type": "number", "minimum": 0.5, "maximum": 2, "default": 1 },
   "titleBarStyle": { "enum": ["custom", "native"], "default": "custom" },
   "language": { "enum": ["en", "zh-CN"], "default": "en" },
   "editorFontFamily": { "type": "string", "default": "Open Sans" },

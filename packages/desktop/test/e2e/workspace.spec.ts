@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { ElectronApplication, Page } from 'playwright'
+import * as fs from 'node:fs/promises'
+import * as path from 'node:path'
 import { launchElectron } from './helpers'
 
 test.describe('Proplan workspace interactions', () => {
@@ -72,6 +74,27 @@ test.describe('Proplan workspace interactions', () => {
     await page.getByTitle('新建任务').click()
     await expect(page.locator('.completion-control')).toHaveCount(0)
     await expect(page.locator('.record-row.active')).toHaveAttribute('draggable', 'false')
+    const editorScrollbar = await page.locator('.proplan-editor-host').evaluate((element) => {
+      const scrollbar = getComputedStyle(element, '::-webkit-scrollbar')
+      const track = getComputedStyle(element, '::-webkit-scrollbar-track')
+      const thumb = getComputedStyle(element, '::-webkit-scrollbar-thumb')
+      return {
+        width: scrollbar.width,
+        trackRadius: track.borderRadius,
+        trackBackground: track.backgroundColor,
+        thumbRadius: thumb.borderRadius,
+        thumbBorder: thumb.borderWidth,
+        thumbBackground: thumb.backgroundColor
+      }
+    })
+    expect(editorScrollbar).toMatchObject({
+      width: '9px',
+      trackRadius: '999px',
+      thumbRadius: '999px',
+      thumbBorder: '2px'
+    })
+    expect(editorScrollbar.trackBackground).not.toBe('rgba(0, 0, 0, 0)')
+    expect(editorScrollbar.thumbBackground).not.toBe('rgba(0, 0, 0, 0)')
     const completedDrawer = page.locator('.completed-task-drawer')
     const completedToggle = page.getByRole('button', { name: '已完成' })
     await expect(completedToggle).toHaveAttribute('aria-expanded', 'false')
@@ -158,9 +181,10 @@ test.describe('Proplan workspace interactions', () => {
     expect(taskPickerMetrics.inputBackground).toBe('rgba(0, 0, 0, 0)')
     expect(taskPickerMetrics.inputBorderWidth).toBe('0px')
     await page.locator('.task-date-picker').hover()
-    const taskPickerHoverBackground = await page.locator('.task-date-picker .el-input__wrapper')
-      .evaluate((element) => getComputedStyle(element).backgroundColor)
-    expect(taskPickerHoverBackground).not.toBe('rgba(0, 0, 0, 0)')
+    await expect(page.locator('.task-date-picker .el-input__wrapper')).not.toHaveCSS(
+      'background-color',
+      'rgba(0, 0, 0, 0)'
+    )
     await page.getByLabel('截止日期').click()
     await expect(page.locator('.el-picker-panel:visible')).toContainText(/\d{4} 年/)
     await expect(page.locator('.el-picker-panel:visible')).toContainText(/\d+ 月/)
@@ -233,11 +257,26 @@ test.describe('Proplan workspace interactions', () => {
 
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
     await page.keyboard.press(`${modifier}+S`)
-    await expect(page.locator('.save-status')).toHaveText(/手动保存成功 \d{2}:\d{2}:\d{2}/)
+    await expect(page.locator('.save-status')).toHaveText(
+      /手动保存成功 \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/
+    )
+
+    await page.evaluate(() =>
+      window.electron.ipcRenderer.send('mt::set-user-preference', {
+        autoSave: true,
+        autoSaveDelay: 1000
+      })
+    )
+    await page.locator('.project-description-input').fill('自动保存日期测试')
+    await expect(page.locator('.save-status')).toHaveText(
+      /自动保存成功 \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/
+    )
 
     await page.getByRole('button', { name: '备忘', exact: true }).click()
     await page.locator('.record-row', { hasText: '备忘一' }).click()
-    await expect(page.locator('.save-status')).toHaveText(/上次保存 \d{2}:\d{2}:\d{2}/)
+    await expect(page.locator('.save-status')).toHaveText(
+      /上次保存 \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/
+    )
   })
 
   test('routes undo and redo shortcuts through the active markdown editor', async() => {
@@ -292,11 +331,60 @@ test.describe('Proplan workspace interactions', () => {
     await expect.poll(zoomFactor).toBe(1.1)
   })
 
+  test('applies editor settings to the main window without restarting', async() => {
+    await page.getByRole('button', { name: '任务', exact: true }).click()
+    await page.locator('.record-row').first().click()
+    await expect(page.locator('.mu-container')).toBeVisible()
+
+    await page.evaluate(() => window.electron.ipcRenderer.send('mt::open-setting-window', 'editor'))
+    await expect.poll(() => app.windows().length).toBe(2)
+    const settings = app.windows().find((window) => window !== page)
+    if (!settings) throw new Error('settings window did not open')
+    await settings.locator('.category .item', { hasText: '编辑器' }).click()
+    await expect(settings.locator('.pref-editor')).toBeVisible()
+
+    const maxWidth = settings.locator('.pref-text-box-item', { hasText: '最大宽度' }).locator('input')
+    await maxWidth.fill('640px')
+    await expect(page.locator('.mu-container')).toHaveCSS('max-width', '640px')
+
+    const fontSize = settings.locator('.pref-range-item', { hasText: '字体大小' }).first()
+    await fontSize.locator('[role="slider"]').press('ArrowUp')
+    await expect(page.locator('.mu-container')).toHaveCSS('font-size', '17px')
+    await settings.close()
+  })
+
   test('shows fixed common shortcuts in settings', async() => {
     await page.evaluate(() => window.electron.ipcRenderer.send('mt::open-setting-window'))
     await expect.poll(() => app.windows().length).toBe(2)
     const settings = app.windows().find((window) => window !== page)
     if (!settings) throw new Error('settings window did not open')
+    await expect(settings.locator('.pref-container')).toBeVisible()
+    await expect.poll(() =>
+      settings.evaluate(() => document.documentElement.classList.contains('preference-window'))
+    ).toBe(true)
+    const hiddenPreferenceScrollbars = await settings.evaluate(() => {
+      const content = document.querySelector('.pref-setting')
+      const categories = document.querySelector('.pref-sidebar .category')
+      return {
+        rootMarked: document.documentElement.classList.contains('preference-window'),
+        content: content ? getComputedStyle(content, '::-webkit-scrollbar').display : '',
+        categories: categories ? getComputedStyle(categories, '::-webkit-scrollbar').display : ''
+      }
+    })
+    expect(hiddenPreferenceScrollbars).toEqual({
+      rootMarked: true,
+      content: 'none',
+      categories: 'none'
+    })
+    await expect(page.locator('.proplan-editor-host')).toHaveCSS('scrollbar-width', 'auto')
+    const zoom = settings.locator('.pref-range-item', { hasText: '缩放比例' })
+    await expect(zoom.locator('.value')).toHaveText('110 %')
+    await zoom.locator('[role="slider"]').press('ArrowUp')
+    await expect.poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().map((window) => window.webContents.getZoomFactor())
+      )
+    ).toEqual([1.2, 1.2])
     await settings.locator('.pref-general .el-select').click()
     await expect(settings.locator('.el-select-dropdown__item:visible')).toHaveCount(2)
     await settings.locator('.el-select-dropdown__item:visible', { hasText: 'English' }).click()
@@ -336,5 +424,56 @@ test.describe('Proplan workspace interactions', () => {
       /自定义键盘快捷键|Customize keyboard shortcuts/
     )
     await settings.close()
+  })
+
+  test('restores the saved zoom factor after relaunching', async() => {
+    const modifier: 'meta' | 'control' = process.platform === 'darwin' ? 'meta' : 'control'
+    await app.evaluate(
+      ({ BrowserWindow }, modifier) => {
+        const contents = BrowserWindow.getAllWindows()[0]?.webContents
+        contents?.sendInputEvent({ type: 'keyDown', keyCode: '0', modifiers: [modifier] })
+        contents?.sendInputEvent({ type: 'keyUp', keyCode: '0', modifiers: [modifier] })
+        for (let index = 0; index < 2; index += 1) {
+          contents?.sendInputEvent({
+            type: 'keyDown',
+            keyCode: '=',
+            modifiers: [modifier, 'shift']
+          })
+          contents?.sendInputEvent({
+            type: 'keyUp',
+            keyCode: '=',
+            modifiers: [modifier, 'shift']
+          })
+        }
+      },
+      modifier
+    )
+    await expect.poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.webContents.getZoomFactor()
+      )
+    ).toBe(1.2)
+
+    const userDataDir = await app.evaluate(({ app: electronApp }) =>
+      electronApp.getPath('userData')
+    )
+    const preferencesPath = path.join(userDataDir, 'preferences.json')
+    await expect.poll(async() =>
+      JSON.parse(await fs.readFile(preferencesPath, 'utf8')).zoomFactor
+    ).toBe(1.2)
+    await app.close()
+    const relaunched = await launchElectron([], userDataDir)
+    app = relaunched.app
+    page = relaunched.page
+
+    await expect.poll(async() =>
+      JSON.parse(await fs.readFile(preferencesPath, 'utf8')).zoomFactor
+    ).toBe(1.2)
+
+    await expect.poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.webContents.getZoomFactor()
+      )
+    ).toBe(1.2)
   })
 })

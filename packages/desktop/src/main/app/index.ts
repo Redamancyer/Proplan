@@ -71,6 +71,9 @@ class App {
       contents.on('will-attach-webview', (event) => event.preventDefault())
       contents.on('will-navigate', (event) => event.preventDefault())
       contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      contents.on('did-finish-load', () => {
+        contents.setZoomFactor(this.savedZoomFactor())
+      })
       contents.on('before-input-event', (event, input) => {
         const commandPressed = isOsx ? input.meta : input.control
         if (!commandPressed || input.alt) return
@@ -83,12 +86,35 @@ class App {
 
         event.preventDefault()
         if (resetZoom) {
-          setContentsZoom(contents)
+          this.updateZoom(contents)
           return
         }
-        setContentsZoom(contents, zoomIn ? ZOOM_FACTOR_STEP : -ZOOM_FACTOR_STEP)
+        this.updateZoom(contents, zoomIn ? ZOOM_FACTOR_STEP : -ZOOM_FACTOR_STEP)
       })
     })
+  }
+
+  private savedZoomFactor(): number {
+    const value = this.accessor.preferences.getItem<number>('zoomFactor')
+    return Number(
+      Math.max(MIN_ZOOM_FACTOR, Math.min(MAX_ZOOM_FACTOR, Number(value) || 1)).toFixed(2)
+    )
+  }
+
+  private applyZoomFactor(factor: number): void {
+    const normalized = Number(
+      Math.max(MIN_ZOOM_FACTOR, Math.min(MAX_ZOOM_FACTOR, factor)).toFixed(2)
+    )
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.setZoomFactor(normalized)
+    }
+  }
+
+  private updateZoom(contents: Electron.WebContents, delta?: number): void {
+    setContentsZoom(contents, delta)
+    const factor = contents.getZoomFactor()
+    this.applyZoomFactor(factor)
+    this.accessor.preferences.setItem('zoomFactor', factor)
   }
 
   private ready(): void {
@@ -189,6 +215,7 @@ class App {
       const preferences = this.accessor.preferences
       nativeTheme.themeSource = getNativeThemeSource({ ...preferences.getAll(), ...change })
       if (change.language) setLanguage(change.language)
+      if (typeof change.zoomFactor === 'number') this.applyZoomFactor(change.zoomFactor)
       this.applySystemTheme()
     })
     nativeTheme.on('updated', () => this.applySystemTheme())
@@ -228,7 +255,7 @@ class App {
       const contents =
         window instanceof BrowserWindow ? window.webContents : this.mainWindow?.webContents
       if (!contents) return
-      setContentsZoom(contents, delta)
+      this.updateZoom(contents, delta)
     }
     const sendEditorCommand = (
       window: Electron.BaseWindow | undefined,

@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, nextTick } from 'vue'
+import { computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { usePreferencesStore } from '@/store/preferences'
 import { storeToRefs } from 'pinia'
 import TitleBar from '@/prefComponents/common/titlebar.vue'
@@ -48,6 +48,7 @@ watch(theme, (newValue, oldValue) => {
 
 // Lifecycle
 onMounted(() => {
+  document.documentElement.classList.add('preference-window')
   nextTick(() => {
     const state = window.proplanBoot?.initialState ?? DEFAULT_STYLE
     addThemeStyle(state.theme ?? DEFAULT_STYLE.theme)
@@ -55,9 +56,26 @@ onMounted(() => {
     preferencesStore.ASK_FOR_USER_PREFERENCE()
   })
 })
+
+onUnmounted(() => {
+  document.documentElement.classList.remove('preference-window')
+})
 </script>
 
 <style>
+html.preference-window,
+html.preference-window body,
+html.preference-window * {
+  scrollbar-width: none !important;
+}
+
+html.preference-window::-webkit-scrollbar,
+html.preference-window *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 .pref-container {
   --prefSideBarWidth: 220px;
 

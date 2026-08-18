@@ -675,15 +675,18 @@ const saveStatus = computed(() => {
   }
   if (lastSavedAt.value) {
     const date = lastSavedAt.value
-    const time = formatSystemDate(date, {
+    const savedAt = formatSystemDate(date, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
     })
     if (lastSaveKind.value) {
-      return `${systemText(lastSaveKind.value === 'manual' ? 'manualSaveSucceeded' : 'autoSaveSucceeded')} ${time}`
+      return `${systemText(lastSaveKind.value === 'manual' ? 'manualSaveSucceeded' : 'autoSaveSucceeded')} ${savedAt}`
     }
-    return `${systemText('lastSaved')} ${time}`
+    return `${systemText('lastSaved')} ${savedAt}`
   }
   if (!autoSave.value) return systemText('saveOnExit')
   return systemText('noUnsavedChanges')

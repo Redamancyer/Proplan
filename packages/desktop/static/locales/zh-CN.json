@@ -515,6 +515,7 @@
       },
       "misc": {
         "title": "杂项",
+        "zoomFactor": "缩放比例",
         "language": {
           "title": "语言",
           "english": "English",

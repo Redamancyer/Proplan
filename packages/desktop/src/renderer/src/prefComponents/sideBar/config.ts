@@ -68,6 +68,7 @@ const preferencesSchema = preferences as unknown as Record<string, PreferenceSch
 const visiblePreferenceKeys = new Set([
   'autoSave',
   'autoSaveDelay',
+  'zoomFactor',
   'language',
   'fontSize',
   'lineHeight',

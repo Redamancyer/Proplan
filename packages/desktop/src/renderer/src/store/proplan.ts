@@ -57,16 +57,39 @@ const TASK_PRIORITY_ORDER: Record<ProplanTask['priority'], number> = {
   low: 2
 }
 
-const compareTasks = (a: ProplanTask, b: ProplanTask, locale: string): number => {
-  const priorityDifference = TASK_PRIORITY_ORDER[a.priority] - TASK_PRIORITY_ORDER[b.priority]
+const compareTaskPriority = (a: ProplanTask, b: ProplanTask): number =>
+  TASK_PRIORITY_ORDER[a.priority] - TASK_PRIORITY_ORDER[b.priority]
+
+const compareTaskDueDate = (
+  a: ProplanTask,
+  b: ProplanTask,
+  direction: 'ascending' | 'descending'
+): number => {
+  if (a.dueAt === b.dueAt) return 0
+  if (!a.dueAt) return 1
+  if (!b.dueAt) return -1
+  return direction === 'ascending'
+    ? a.dueAt.localeCompare(b.dueAt)
+    : b.dueAt.localeCompare(a.dueAt)
+}
+
+const compareTaskTitle = (a: ProplanTask, b: ProplanTask, locale: string): number =>
+  new Intl.Collator(locale, { sensitivity: 'base', numeric: true }).compare(a.title, b.title)
+
+const compareIncompleteTasks = (a: ProplanTask, b: ProplanTask, locale: string): number => {
+  const priorityDifference = compareTaskPriority(a, b)
   if (priorityDifference !== 0) return priorityDifference
-  if (a.dueAt !== b.dueAt) {
-    if (!a.dueAt) return 1
-    if (!b.dueAt) return -1
-    const dueDateDifference = a.dueAt.localeCompare(b.dueAt)
-    if (dueDateDifference !== 0) return dueDateDifference
-  }
-  return new Intl.Collator(locale, { sensitivity: 'base', numeric: true }).compare(a.title, b.title)
+  const dueDateDifference = compareTaskDueDate(a, b, 'ascending')
+  if (dueDateDifference !== 0) return dueDateDifference
+  return compareTaskTitle(a, b, locale)
+}
+
+const compareCompletedTasks = (a: ProplanTask, b: ProplanTask, locale: string): number => {
+  const dueDateDifference = compareTaskDueDate(a, b, 'descending')
+  if (dueDateDifference !== 0) return dueDateDifference
+  const priorityDifference = compareTaskPriority(a, b)
+  if (priorityDifference !== 0) return priorityDifference
+  return compareTaskTitle(a, b, locale)
 }
 
 const moveBefore = <T>(items: T[], sourceIndex: number, targetIndex: number): void => {
@@ -117,7 +140,7 @@ export const useProplanStore = defineStore('proplan', () => {
     return projects.value
       .flatMap((project) =>
         [...project.tasks]
-          .sort((a, b) => compareTasks(a, b, preferences.language))
+          .sort((a, b) => compareIncompleteTasks(a, b, preferences.language))
           .map((task) => ({
             projectId: project.id,
             projectName: project.name,
@@ -132,12 +155,12 @@ export const useProplanStore = defineStore('proplan', () => {
   const incompleteProjectTasks = computed<ProplanTask[]>(() =>
     [...(selectedProject.value?.tasks ?? [])]
       .filter((task) => !task.completed)
-      .sort((a, b) => compareTasks(a, b, preferences.language))
+      .sort((a, b) => compareIncompleteTasks(a, b, preferences.language))
   )
   const completedProjectTasks = computed<ProplanTask[]>(() =>
     [...(selectedProject.value?.tasks ?? [])]
       .filter((task) => task.completed)
-      .sort((a, b) => compareTasks(a, b, preferences.language))
+      .sort((a, b) => compareCompletedTasks(a, b, preferences.language))
   )
 
   const records = computed<ProplanRecord[]>(() => {

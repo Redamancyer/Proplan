@@ -271,6 +271,35 @@ onBeforeUnmount(() => {
   cursor: text;
 }
 
+.proplan-editor-host::-webkit-scrollbar {
+  width: 9px;
+  background: transparent;
+}
+
+.proplan-editor-host::-webkit-scrollbar-track {
+  margin-block: 7px;
+  background: color-mix(in srgb, var(--editorColor10) 45%, transparent);
+  border-radius: 999px;
+}
+
+.proplan-editor-host::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  background: color-mix(in srgb, var(--editorColor30) 78%, transparent);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+.proplan-editor-host::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--editorColor50) 82%, transparent);
+  background-clip: padding-box;
+}
+
+.proplan-editor-host::-webkit-scrollbar-corner {
+  background: transparent;
+  border-radius: 999px;
+}
+
 .proplan-editor-host .mu-container {
   box-sizing: border-box;
   width: calc(100% - 64px) !important;

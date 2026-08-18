@@ -295,7 +295,7 @@ describe('proplan store', () => {
     expect(store.records.map((record) => record.id)).toEqual([firstMemo.id, secondMemo.id])
   })
 
-  it('sorts project tasks by completion, priority, due date, and title', async() => {
+  it('uses different sort precedence for incomplete and completed project tasks', async() => {
     const store = useProplanStore()
     await store.initialize()
     store.createProject()
@@ -313,8 +313,16 @@ describe('proplan store', () => {
     createTask('Low', 'low', '2026-08-16')
     const completedMedium = createTask('Completed medium', 'medium', '2026-08-15')
     const completedHigh = createTask('Completed high', 'high', '2026-08-21')
+    const completedLow = createTask('Completed low', 'low', '2026-08-20')
+    const completedBeta = createTask('Completed beta', 'high', '2026-08-20')
+    const completedAlpha = createTask('Completed alpha', 'high', '2026-08-20')
+    const completedNoDate = createTask('Completed no date', 'high', null)
     store.toggleTask(completedMedium.id)
     store.toggleTask(completedHigh.id)
+    store.toggleTask(completedLow.id)
+    store.toggleTask(completedBeta.id)
+    store.toggleTask(completedAlpha.id)
+    store.toggleTask(completedNoDate.id)
 
     expect(store.records.map((record) => record.title)).toEqual([
       'Soon',
@@ -327,7 +335,11 @@ describe('proplan store', () => {
     store.setProjectTaskFilter('completed')
     expect(store.records.map((record) => record.title)).toEqual([
       'Completed high',
-      'Completed medium'
+      'Completed alpha',
+      'Completed beta',
+      'Completed low',
+      'Completed medium',
+      'Completed no date'
     ])
   })
 
@@ -349,15 +361,18 @@ describe('proplan store', () => {
     expect(store.records.map((record) => record.id)).toEqual([newer.id, older.id])
   })
 
-  it('sorts my tasks by project order before task fields', async() => {
+  it('sorts my tasks by project order and earliest due date within a priority', async() => {
     vi.setSystemTime(new Date(2026, 7, 17, 12))
     const store = useProplanStore()
     await store.initialize()
     const firstProject = store.createProject()
     store.updateProject(firstProject.id, { name: 'First project' })
-    const firstLow = store.createRecord('tasks')
-    if (!firstLow || !('completed' in firstLow)) throw new Error('expected task')
-    store.updateSelectedRecord({ title: 'First low', priority: 'low', dueAt: '2026-08-17' })
+    const firstOlder = store.createRecord('tasks')
+    if (!firstOlder || !('completed' in firstOlder)) throw new Error('expected task')
+    store.updateSelectedRecord({ title: 'First older', priority: 'high', dueAt: '2026-08-17' })
+    const firstNewer = store.createRecord('tasks')
+    if (!firstNewer || !('completed' in firstNewer)) throw new Error('expected task')
+    store.updateSelectedRecord({ title: 'First newer', priority: 'high', dueAt: '2026-08-20' })
 
     const secondProject = store.createProject()
     store.updateProject(secondProject.id, { name: 'Second project' })
@@ -366,8 +381,16 @@ describe('proplan store', () => {
     store.updateSelectedRecord({ title: 'Second high', priority: 'high', dueAt: '2026-08-17' })
 
     store.setView('globalTasks')
-    expect(store.records.map((record) => record.title)).toEqual(['First low', 'Second high'])
+    expect(store.records.map((record) => record.title)).toEqual([
+      'First older',
+      'First newer',
+      'Second high'
+    ])
     store.reorderProjects(secondProject.id, firstProject.id)
-    expect(store.records.map((record) => record.title)).toEqual(['Second high', 'First low'])
+    expect(store.records.map((record) => record.title)).toEqual([
+      'Second high',
+      'First older',
+      'First newer'
+    ])
   })
 })

@@ -138,6 +138,11 @@ class Preference extends TypedEmitter<PreferenceEvents> {
       value = 'native'
     }
     this.store.set(key, value)
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('mt::user-preference', { [key]: value })
+      }
+    }
     ipcMain.emit('broadcast-preferences-changed', { [key]: value })
   }
 

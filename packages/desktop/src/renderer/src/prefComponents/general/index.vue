@@ -32,6 +32,15 @@
         </h6>
       </template>
       <template #children>
+        <range
+          :description="t('preferences.general.misc.zoomFactor')"
+          :value="zoomPercent"
+          :min="50"
+          :max="200"
+          unit="%"
+          :step="10"
+          :on-change="onZoomChange"
+        />
         <cur-select
           :description="t('preferences.general.misc.language.title')"
           :value="language"
@@ -44,6 +53,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { usePreferencesStore } from '@/store/preferences'
@@ -57,9 +67,14 @@ import { getLanguageOptions } from './config'
 const { t } = useI18n()
 const preferenceStore = usePreferencesStore()
 
-const { autoSave, autoSaveDelay, language } = storeToRefs(preferenceStore)
+const { autoSave, autoSaveDelay, language, zoomFactor } = storeToRefs(preferenceStore)
+const zoomPercent = computed(() => Math.round(zoomFactor.value * 100))
 
 const onSelectChange = (type: keyof PreferencesState, value: unknown): void => {
   preferenceStore.SET_SINGLE_PREFERENCE({ type, value })
+}
+
+const onZoomChange = (value: number): void => {
+  preferenceStore.SET_SINGLE_PREFERENCE({ type: 'zoomFactor', value: value / 100 })
 }
 </script>

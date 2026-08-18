@@ -1,6 +1,7 @@
 export interface IUserPreferences {
   autoSave?: boolean
   autoSaveDelay?: number
+  zoomFactor?: number
   titleBarStyle?: 'custom' | 'native'
   language?: string
   editorFontFamily?: string
