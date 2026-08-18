@@ -41,6 +41,7 @@ export interface IpcSendChannels {
   'mt::ask-for-user-preference': []
   'mt::check-for-update': []
   'mt::clipboard::write-text': [text: string]
+  'mt::close-setting-window': []
   'mt::close-window': []
   'mt::get-current-language': []
   'mt::handle-renderer-error': [error: unknown]
@@ -75,6 +76,7 @@ export interface IpcMainEventChannels {
   'mt::proplan::flush-before-backup': [requestId: string]
   'mt::proplan::editor-command': [command: 'undo' | 'redo']
   'mt::proplan::restored': []
+  'mt::settings-window-visibility': [visible: boolean]
   'mt::user-preference': [partial: Record<string, unknown>]
   'settings::change-tab': [category?: string]
 }

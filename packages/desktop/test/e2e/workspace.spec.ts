@@ -353,12 +353,46 @@ test.describe('Proplan workspace interactions', () => {
     await settings.close()
   })
 
-  test('shows fixed common shortcuts in settings', async() => {
+  test('centers settings over the main window and closes it from the backdrop', async() => {
     await page.evaluate(() => window.electron.ipcRenderer.send('mt::open-setting-window'))
     await expect.poll(() => app.windows().length).toBe(2)
     const settings = app.windows().find((window) => window !== page)
     if (!settings) throw new Error('settings window did not open')
     await expect(settings.locator('.pref-container')).toBeVisible()
+    await expect(page.locator('.settings-window-backdrop')).toBeVisible()
+
+    const centers = await app.evaluate(({ BrowserWindow }) => {
+      const windows = BrowserWindow.getAllWindows()
+      const main = windows.find((window) => !window.getParentWindow())?.getBounds()
+      const preferences = windows.find((window) => window.getParentWindow())?.getBounds()
+      return {
+        horizontal: main && preferences
+          ? Math.abs(main.x + main.width / 2 - (preferences.x + preferences.width / 2))
+          : -1,
+        vertical: main && preferences
+          ? Math.abs(main.y + main.height / 2 - (preferences.y + preferences.height / 2))
+          : -1
+      }
+    })
+    expect(centers.horizontal).toBeLessThanOrEqual(1)
+    expect(centers.vertical).toBeLessThanOrEqual(1)
+
+    await page.locator('.settings-window-backdrop').click({ position: { x: 8, y: 8 } })
+    await expect.poll(() => app.windows().length).toBe(1)
+    await expect(page.locator('.settings-window-backdrop')).toHaveCount(0)
+  })
+
+  test('shows fixed common shortcuts in settings', async() => {
+    const openSettings = async(): Promise<Page> => {
+      await page.evaluate(() => window.electron.ipcRenderer.send('mt::open-setting-window'))
+      await expect.poll(() => app.windows().length).toBe(2)
+      const settingsWindow = app.windows().find((window) => window !== page)
+      if (!settingsWindow) throw new Error('settings window did not open')
+      await expect(settingsWindow.locator('.pref-container')).toBeVisible()
+      return settingsWindow
+    }
+    let settings = await openSettings()
+    if (!settings) throw new Error('settings window did not open')
     await expect.poll(() =>
       settings.evaluate(() => document.documentElement.classList.contains('preference-window'))
     ).toBe(true)
@@ -393,12 +427,16 @@ test.describe('Proplan workspace interactions', () => {
       'Add project description'
     )
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    await settings.close()
+    await expect(page.locator('.settings-window-backdrop')).toHaveCount(0)
+
     await page.getByRole('button', { name: 'Tasks', exact: true }).click()
     await page.locator('.record-row').first().click()
     await page.getByLabel('Due date').click()
     await expect(page.locator('.el-picker-panel:visible')).toContainText('SunMonTueWedThuFriSat')
     await page.keyboard.press('Escape')
 
+    settings = await openSettings()
     await settings.locator('.pref-general .el-select').click()
     await settings.locator('.el-select-dropdown__item:visible', { hasText: '简体中文' }).click()
     await expect(page.locator('.project-description-input')).toHaveAttribute(
@@ -406,6 +444,9 @@ test.describe('Proplan workspace interactions', () => {
       '添加项目描述'
     )
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+    await settings.close()
+    await expect(page.locator('.settings-window-backdrop')).toHaveCount(0)
+
     await page.getByLabel('截止日期').click()
     await expect(page.locator('.el-picker-panel:visible')).toContainText('日一二三四五六')
     await page.keyboard.press('Escape')
@@ -416,6 +457,7 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
     await expect(page.locator('.weekday-row')).toContainText('一')
 
+    settings = await openSettings()
     await settings.getByText(/快捷键|Keybindings/, { exact: true }).click()
     await expect(settings.locator('.pref-keybindings')).toContainText(/保存|Save/)
     await expect(settings.locator('.pref-keybindings')).toContainText(/撤销|Undo/)

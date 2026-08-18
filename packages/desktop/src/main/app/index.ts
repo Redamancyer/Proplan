@@ -186,17 +186,53 @@ class App {
   private openSettings(category?: string): void {
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
       this.settingsWindow.webContents.send('settings::change-tab', category)
+      this.centerSettingsWindow()
+      this.setSettingsOverlay(true)
       this.settingsWindow.show()
       this.settingsWindow.focus()
       return
     }
-    const window = new BrowserWindow(this.windowOptions(preferencesWindowOptions))
+    const window = new BrowserWindow({
+      ...this.windowOptions(preferencesWindowOptions),
+      parent: this.mainWindow ?? undefined,
+      show: false
+    })
     this.settingsWindow = window
     window.setSheetOffset(TITLE_BAR_HEIGHT)
+    this.centerSettingsWindow()
+    this.setSettingsOverlay(true)
+    window.once('ready-to-show', () => {
+      this.centerSettingsWindow()
+      window.show()
+      window.focus()
+    })
     window.on('closed', () => {
       this.settingsWindow = null
+      this.setSettingsOverlay(false)
     })
     window.loadURL(this.rendererUrl('settings'))
+  }
+
+  private centerSettingsWindow(): void {
+    if (
+      !this.mainWindow ||
+      this.mainWindow.isDestroyed() ||
+      !this.settingsWindow ||
+      this.settingsWindow.isDestroyed()
+    ) {
+      return
+    }
+    const parentBounds = this.mainWindow.getBounds()
+    const settingsBounds = this.settingsWindow.getBounds()
+    this.settingsWindow.setPosition(
+      Math.round(parentBounds.x + (parentBounds.width - settingsBounds.width) / 2),
+      Math.round(parentBounds.y + (parentBounds.height - settingsBounds.height) / 2)
+    )
+  }
+
+  private setSettingsOverlay(visible: boolean): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
+    this.mainWindow.webContents.send('mt::settings-window-visibility', visible)
   }
 
   private focusMainWindow(): void {
@@ -238,6 +274,10 @@ class App {
     })
     ipcMain.on('mt::open-setting-window', (_event, category?: string) => this.openSettings(category))
     onInternalChannel('app-create-settings-window', (category?: string) => this.openSettings(category))
+    ipcMain.on('mt::close-setting-window', (event) => {
+      if (BrowserWindow.fromWebContents(event.sender) !== this.mainWindow) return
+      this.settingsWindow?.close()
+    })
     ipcMain.on('mt::close-window', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender)
       if (!window) return

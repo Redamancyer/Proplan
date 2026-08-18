@@ -1,10 +1,16 @@
 <template>
   <ProplanWorkspace :style="{ '--proplan-editor-max-width': editorMaxWidth }" />
   <AboutDialog />
+  <div
+    v-if="settingsWindowVisible"
+    class="settings-window-backdrop"
+    aria-hidden="true"
+    @pointerdown="closeSettingsWindow"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import ProplanWorkspace from '@/components/proplan/ProplanWorkspace.vue'
 import AboutDialog from '@/components/about/index.vue'
@@ -16,6 +22,7 @@ import { addCustomStyle, addThemeStyle } from '@/util/theme'
 
 const preferencesStore = usePreferencesStore()
 const proplanStore = useProplanStore()
+const settingsWindowVisible = ref(false)
 preferencesStore.SET_USER_PREFERENCE(window.proplanBoot?.initialState ?? {})
 
 const { customCss, editorLineWidth, theme } = storeToRefs(preferencesStore)
@@ -56,10 +63,29 @@ const removeRestoreListener = window.electron.ipcRenderer.on('mt::proplan::resto
 const removeAboutListener = window.electron.ipcRenderer.on('mt::about-dialog', (_event, license) =>
   bus.emit('aboutDialog', license)
 )
+const removeSettingsVisibilityListener = window.electron.ipcRenderer.on(
+  'mt::settings-window-visibility',
+  (_event, visible) => {
+    settingsWindowVisible.value = visible
+  }
+)
+const closeSettingsWindow = (): void => {
+  window.electron.ipcRenderer.send('mt::close-setting-window')
+}
 
 onUnmounted(() => {
   removeFlushListener()
   removeRestoreListener()
   removeAboutListener()
+  removeSettingsVisibilityListener()
 })
 </script>
+
+<style>
+.settings-window-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  background: rgba(0, 0, 0, 0.24);
+}
+</style>
