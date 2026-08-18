@@ -107,6 +107,9 @@ export const usePreferencesStore = defineStore('preferences', {
       window.electron.ipcRenderer.on('mt::user-preference', (_event, preferences) => {
         this.SET_USER_PREFERENCE(preferences as Partial<PreferencesState>)
       })
+      window.electron.ipcRenderer.on('language-changed', (_event, language) => {
+        if (typeof language === 'string') this.language = language
+      })
     },
     SET_SINGLE_PREFERENCE({ type, value }: { type: keyof PreferencesState; value: unknown }): void {
       ;(this as unknown as Record<string, unknown>)[type] = value

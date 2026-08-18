@@ -1,6 +1,7 @@
 import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { usePreferencesStore } from './preferences'
+import { systemTextForLocale } from '@/util/systemLocale'
 import {
   createEmptyProplanDatabase,
   type ProplanDatabase,
@@ -71,6 +72,22 @@ export const useProplanStore = defineStore('proplan', () => {
   const globalTaskFilter = ref<GlobalTaskFilter>('all')
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   const lastSavedSnapshot = ref('')
+  const savedRecordTimes = new Map<string, string>()
+
+  const refreshSavedRecordTimes = (): void => {
+    savedRecordTimes.clear()
+    for (const project of database.value.projects) {
+      for (const record of [...project.memos, ...project.tasks, ...project.timeline]) {
+        savedRecordTimes.set(record.id, record.updatedAt)
+      }
+    }
+  }
+
+  const showRecordSavedTime = (recordId: string, fallback = new Date()): void => {
+    const savedAt = new Date(savedRecordTimes.get(recordId) ?? '')
+    lastSavedAt.value = Number.isNaN(savedAt.getTime()) ? fallback : savedAt
+    lastSaveKind.value = null
+  }
 
   const projects = computed(() => database.value.projects)
   const selectedProject = computed(
@@ -137,6 +154,7 @@ export const useProplanStore = defineStore('proplan', () => {
     try {
       await window.proplan.save(cloneDatabase(database.value))
       lastSavedSnapshot.value = snapshot
+      refreshSavedRecordTimes()
       lastSavedAt.value = new Date()
       lastSaveKind.value = kind
       return true
@@ -170,6 +188,7 @@ export const useProplanStore = defineStore('proplan', () => {
     database.value = await window.proplan.load()
     database.value.projects.forEach(sortTimeline)
     lastSavedSnapshot.value = databaseSnapshot(database.value)
+    refreshSavedRecordTimes()
     selectedProjectId.value = database.value.projects[0]?.id ?? null
     selectedRecordId.value = null
     loaded.value = true
@@ -183,6 +202,7 @@ export const useProplanStore = defineStore('proplan', () => {
     database.value = await window.proplan.load()
     database.value.projects.forEach(sortTimeline)
     lastSavedSnapshot.value = databaseSnapshot(database.value)
+    refreshSavedRecordTimes()
     selectedProjectId.value = database.value.projects[0]?.id ?? null
     selectedRecordId.value = null
     view.value = 'memos'
@@ -213,9 +233,9 @@ export const useProplanStore = defineStore('proplan', () => {
   const selectRecord = (recordId: string): void => {
     const availableRecords =
       view.value === 'globalTasks' ? globalTasks.value.map(({ task }) => task) : records.value
-    selectedRecordId.value = availableRecords.some((record) => record.id === recordId)
-      ? recordId
-      : null
+    const record = availableRecords.find((item) => item.id === recordId)
+    selectedRecordId.value = record?.id ?? null
+    if (record) showRecordSavedTime(record.id)
   }
 
   const clearSelectedRecord = (): void => {
@@ -230,7 +250,7 @@ export const useProplanStore = defineStore('proplan', () => {
     const timestamp = now()
     const project: ProplanProject = {
       id: newId(),
-      name: '未命名项目',
+      name: systemTextForLocale(preferences.language, 'untitledProject'),
       description: '',
       color: PROJECT_COLORS[projects.value.length % PROJECT_COLORS.length] ?? '#4f7c6a',
       createdAt: timestamp,
@@ -291,7 +311,7 @@ export const useProplanStore = defineStore('proplan', () => {
     if (section === 'tasks') {
       record = {
         ...base,
-        title: '新任务',
+        title: systemTextForLocale(preferences.language, 'defaultTaskTitle'),
         completed: false,
         dueAt: null,
         completedAt: null
@@ -299,15 +319,20 @@ export const useProplanStore = defineStore('proplan', () => {
       project.tasks.unshift(record)
       database.value.globalTaskOrder.unshift(record.id)
     } else if (section === 'timeline') {
-      record = { ...base, title: '新时间节点', occurredAt: timestamp }
+      record = {
+        ...base,
+        title: systemTextForLocale(preferences.language, 'defaultTimelineTitle'),
+        occurredAt: timestamp
+      }
       project.timeline.unshift(record)
       sortTimeline(project)
     } else {
-      record = { ...base, title: '新备忘' }
+      record = { ...base, title: systemTextForLocale(preferences.language, 'defaultMemoTitle') }
       project.memos.unshift(record)
     }
     view.value = section
     selectedRecordId.value = record.id
+    showRecordSavedTime(record.id, new Date(timestamp))
     touchProject(project)
     return record
   }

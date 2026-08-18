@@ -2,7 +2,7 @@
   "autoSave": { "type": "boolean", "default": false },
   "autoSaveDelay": { "type": "number", "minimum": 1000, "default": 5000 },
   "titleBarStyle": { "enum": ["custom", "native"], "default": "custom" },
-  "language": { "type": "string", "default": "en" },
+  "language": { "enum": ["en", "zh-CN"], "default": "en" },
   "editorFontFamily": { "type": "string", "default": "Open Sans" },
   "fontSize": { "type": "number", "minimum": 12, "maximum": 32, "default": 16 },
   "lineHeight": { "type": "number", "minimum": 1.2, "maximum": 2, "default": 1.6 },

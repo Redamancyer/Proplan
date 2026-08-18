@@ -4,8 +4,8 @@
       <div class="calendar-heading no-drag">
         <h2>{{ monthTitle }}</h2>
         <span class="calendar-summary">
-          本月 {{ monthItemCount }} 项
-          <template v-if="unscheduledItemCount"> · 未排期 {{ unscheduledItemCount }} 项</template>
+          {{ systemText('monthItems', { count: monthItemCount }) }}
+          <template v-if="unscheduledItemCount"> · {{ systemText('unscheduledItems', { count: unscheduledItemCount }) }}</template>
         </span>
       </div>
 
@@ -14,20 +14,20 @@
           class="today-button"
           @click="goToToday"
         >
-          今天
+          {{ systemText('today') }}
         </button>
         <button
           class="calendar-icon-button"
-          title="上个月"
-          aria-label="上个月"
+          :title="systemText('previousMonth')"
+          :aria-label="systemText('previousMonth')"
           @click="changeMonth(-1)"
         >
           <ArrowLeft />
         </button>
         <button
           class="calendar-icon-button"
-          title="下个月"
-          aria-label="下个月"
+          :title="systemText('nextMonth')"
+          :aria-label="systemText('nextMonth')"
           @click="changeMonth(1)"
         >
           <ArrowRight />
@@ -54,7 +54,7 @@
           <span
             v-if="day.isToday"
             class="today-label"
-          >今天</span>
+          >{{ systemText('today') }}</span>
         </div>
 
         <div class="day-tasks">
@@ -85,17 +85,33 @@
 import { computed, ref, watch } from 'vue'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import type { ProplanCalendarItem, ProplanSection } from '@shared/types/proplan'
+import {
+  formatLocaleDate,
+  systemTextForLocale,
+  type SystemTextKey,
+  type SystemTextParams
+} from '@/util/systemLocale'
 
 const props = defineProps<{
   items: ProplanCalendarItem[]
   todayKey: string
+  locale: string
 }>()
+
+const systemText = (key: SystemTextKey, params: SystemTextParams = {}): string =>
+  systemTextForLocale(props.locale, key, params)
+const formatSystemDate = (date: Date, options: Intl.DateTimeFormatOptions): string =>
+  formatLocaleDate(props.locale, date, options)
 
 const emit = defineEmits<{
   selectItem: [itemId: string, kind: ProplanSection]
 }>()
 
-const weekdays = ['一', '二', '三', '四', '五', '六', '日']
+const weekdays = computed(() =>
+  Array.from({ length: 7 }, (_, index) =>
+    formatSystemDate(new Date(2024, 0, 1 + index), { weekday: 'short' })
+  )
+)
 const today = new Date()
 const visibleMonth = ref(new Date(today.getFullYear(), today.getMonth(), 1))
 
@@ -108,7 +124,7 @@ const dateKey = (date: Date): string => {
 
 const visibleMonthKey = computed(() => dateKey(visibleMonth.value).slice(0, 7))
 const monthTitle = computed(() =>
-  visibleMonth.value.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
+  formatSystemDate(visibleMonth.value, { year: 'numeric', month: 'long' })
 )
 const monthItemCount = computed(
   () => props.items.filter((item) => item.date?.startsWith(visibleMonthKey.value)).length

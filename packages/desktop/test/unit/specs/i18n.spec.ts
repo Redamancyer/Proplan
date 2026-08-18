@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest'
+import { getSupportedLanguages, isLanguageSupported } from '../../../src/common/i18n'
+import { systemTextForLocale } from '../../../src/renderer/src/util/systemLocale'
 
 interface MockI18nUtils {
   loadTranslations: Mock
@@ -7,6 +9,31 @@ interface MockI18nUtils {
 // Window.i18nUtils is required in the runtime contextBridge typing, but in
 // this unit test we install a mock with `vi.fn` and remove it between specs.
 const win = window as unknown as { i18nUtils?: MockI18nUtils }
+
+describe('supported application languages', () => {
+  it('only exposes English and Simplified Chinese', () => {
+    expect(getSupportedLanguages()).toEqual(['en', 'zh-CN'])
+    expect(isLanguageSupported('en')).toBe(true)
+    expect(isLanguageSupported('zh-CN')).toBe(true)
+    expect(isLanguageSupported('zh-TW')).toBe(false)
+    expect(isLanguageSupported('ja')).toBe(false)
+  })
+
+  it('localizes all Proplan text from the configured application locale', () => {
+    expect(systemTextForLocale('zh-CN', 'deleteRecordConfirm', { title: '计划' })).toBe(
+      '确定删除“计划”吗？'
+    )
+    expect(systemTextForLocale('en-US', 'deleteRecordConfirm', { title: 'Plan' })).toBe(
+      'Delete "Plan"?'
+    )
+    expect(systemTextForLocale('en-GB', 'saveFailed')).toBe('Save failed')
+    expect(systemTextForLocale('zh-HK', 'dateTime')).toBe('发生日期和时间')
+    expect(systemTextForLocale('en', 'addProjectDescription')).toBe('Add project description')
+    expect(systemTextForLocale('zh-CN', 'addProjectDescription')).toBe('添加项目描述')
+    expect(systemTextForLocale('en', 'monthItems', { count: 2 })).toBe('2 this month')
+    expect(systemTextForLocale('zh-CN', 'monthItems', { count: 2 })).toBe('本月 2 项')
+  })
+})
 
 describe('renderer i18n language loading', () => {
   beforeEach(() => {

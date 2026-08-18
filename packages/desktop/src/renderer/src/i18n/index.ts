@@ -90,6 +90,7 @@ export const setLanguage = async(locale: string): Promise<void> => {
     }
   }
   globalI18n.locale.value = locale
+  document.documentElement.lang = locale
 }
 
 // Export the current language getter function

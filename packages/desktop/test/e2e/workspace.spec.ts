@@ -10,6 +10,10 @@ test.describe('Proplan workspace interactions', () => {
     const launched = await launchElectron()
     app = launched.app
     page = launched.page
+    await page.evaluate(() =>
+      window.electron.ipcRenderer.send('mt::set-user-preference', { language: 'zh-CN' })
+    )
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
   })
 
   test.afterAll(async() => {
@@ -68,6 +72,9 @@ test.describe('Proplan workspace interactions', () => {
     await page.getByTitle('新建任务').click()
     await expect(page.locator('.completion-control')).toHaveCount(0)
     await expect(page.getByLabel('截止日期')).toHaveCount(1)
+    const applicationLocale = await page.locator('html').getAttribute('lang')
+    expect(applicationLocale).toMatch(/^(en|zh-CN)$/)
+    await expect(page.getByLabel('截止日期')).toHaveAttribute('lang', applicationLocale ?? '')
 
     await page.getByRole('button', { name: '时间轴', exact: true }).click()
     await page.getByTitle('新建时间节点').click()
@@ -90,6 +97,10 @@ test.describe('Proplan workspace interactions', () => {
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
     await page.keyboard.press(`${modifier}+S`)
     await expect(page.locator('.save-status')).toHaveText(/手动保存成功 \d{2}:\d{2}:\d{2}/)
+
+    await page.getByRole('button', { name: '备忘', exact: true }).click()
+    await page.locator('.record-row', { hasText: '备忘一' }).click()
+    await expect(page.locator('.save-status')).toHaveText(/上次保存 \d{2}:\d{2}:\d{2}/)
   })
 
   test('routes undo and redo shortcuts through the active markdown editor', async() => {
@@ -143,6 +154,28 @@ test.describe('Proplan workspace interactions', () => {
     await expect.poll(() => app.windows().length).toBe(2)
     const settings = app.windows().find((window) => window !== page)
     if (!settings) throw new Error('settings window did not open')
+    await settings.locator('.pref-general .el-select').click()
+    await expect(settings.locator('.el-select-dropdown__item:visible')).toHaveCount(2)
+    await settings.locator('.el-select-dropdown__item:visible', { hasText: 'English' }).click()
+    await expect(page.locator('.project-description-input')).toHaveAttribute(
+      'placeholder',
+      'Add project description'
+    )
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+
+    await settings.locator('.pref-general .el-select').click()
+    await settings.locator('.el-select-dropdown__item:visible', { hasText: '简体中文' }).click()
+    await expect(page.locator('.project-description-input')).toHaveAttribute(
+      'placeholder',
+      '添加项目描述'
+    )
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+
+    await page.getByRole('button', { name: '任务', exact: true }).click()
+    await expect(page.locator('.calendar-heading h2')).toContainText('年')
+    await expect(page.getByRole('button', { name: '今天', exact: true })).toBeVisible()
+    await expect(page.locator('.weekday-row')).toContainText('一')
+
     await settings.getByText(/快捷键|Keybindings/, { exact: true }).click()
     await expect(settings.locator('.pref-keybindings')).toContainText(/保存|Save/)
     await expect(settings.locator('.pref-keybindings')).toContainText(/撤销|Undo/)

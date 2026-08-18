@@ -10,10 +10,11 @@
 <script setup lang="ts">
 import { computed, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { de, en, es, fr, ja, ko, Muya, pt, tr, zhCN, zhTW } from '@muyajs/core'
+import { en, Muya, zhCN } from '@muyajs/core'
 import type { ILocale } from '@muyajs/core'
 import { registerMuyaPlugins } from '@/util/muyaPlugins'
 import notice from '@/services/notification'
+import { systemTextForLocale, type SystemTextKey } from '@/util/systemLocale'
 import { usePreferencesStore } from '@/store/preferences'
 import { DEFAULT_CODE_FONT_FAMILY, DEFAULT_EDITOR_FONT_FAMILY } from '@/config'
 import type { ProplanImageSource } from '@shared/types/proplan'
@@ -64,18 +65,11 @@ const {
 } = storeToRefs(preferencesStore)
 
 const locales: Record<string, ILocale> = {
-  de,
   en,
-  es,
-  fr,
-  ja,
-  ko,
-  pt,
-  tr,
-  'zh-CN': zhCN,
-  'zh-TW': zhTW
+  'zh-CN': zhCN
 }
 const editorLocale = computed(() => locales[language.value] ?? en)
+const systemText = (key: SystemTextKey): string => systemTextForLocale(language.value, key)
 const resolveEditorFont = (family: string): string =>
   family ? `${family}, ${DEFAULT_EDITOR_FONT_FAMILY}` : DEFAULT_EDITOR_FONT_FAMILY
 const resolveCodeFont = (family: string): string =>
@@ -183,10 +177,10 @@ const persistImage = async (state: { src: string }): Promise<string> => {
     const result = await window.proplan.importImage(sourceFromImageState(state.src))
     return result?.url ?? state.src
   } catch (error) {
-    const message = error instanceof Error ? error.message : '无法保存图片'
+    const message = error instanceof Error ? error.message : systemText('cannotSaveImage')
     notice
       .notify({
-        title: '图片保存失败',
+        title: systemText('imageSaveFailed'),
         message,
         type: 'error'
       })

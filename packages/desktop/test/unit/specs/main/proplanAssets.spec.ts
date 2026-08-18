@@ -54,9 +54,11 @@ describe('Proplan managed image assets', () => {
     await fs.writeFile(fakePath, 'not an image')
 
     await expect(readLocalImage(imagePath)).resolves.toMatchObject({ extension: 'png' })
-    await expect(readLocalImage(fakePath)).rejects.toThrow('文件内容不是受支持的图片格式')
+    await expect(readLocalImage(fakePath)).rejects.toThrow(/Unsupported image content|文件内容不是受支持/)
     expect(readDataImage(`data:image/png;base64,${PNG.toString('base64')}`).extension).toBe('png')
-    expect(() => readDataImage('data:text/plain;base64,SGVsbG8=')).toThrow('图片数据无效')
+    expect(() => readDataImage('data:text/plain;base64,SGVsbG8=')).toThrow(
+      /Invalid pasted image data|图片数据无效/
+    )
   })
 
   it('accepts successful Electron responses that omit the final response URL', async() => {
@@ -204,10 +206,14 @@ describe('Proplan managed image assets', () => {
     )
 
     backup.assets[0].sha256 = '0'.repeat(64)
-    expect(() => parseProplanBackup(JSON.stringify(backup))).toThrow('图片校验失败')
+    expect(() => parseProplanBackup(JSON.stringify(backup))).toThrow(
+      /Image checksum failed|图片校验失败/
+    )
 
     backup.assets[0].filename = '../image.png'
-    expect(() => parseProplanBackup(JSON.stringify(backup))).toThrow('图片清单无效')
+    expect(() => parseProplanBackup(JSON.stringify(backup))).toThrow(
+      /invalid image manifest|图片清单无效/
+    )
   })
 
   it('rejects incomplete or duplicate database identifiers', () => {
@@ -232,16 +238,16 @@ describe('Proplan managed image assets', () => {
     }
 
     expect(() => normalizeProplanDatabase({ version: 1, projects: [{ ...project, id: '' }] })).toThrow(
-      '缺少有效 ID'
+      /has no valid ID|缺少有效 ID/
     )
     expect(() =>
       normalizeProplanDatabase({ version: 1, projects: [{ ...project, tasks: [record] }] })
-    ).toThrow('记录 ID 重复')
+    ).toThrow(/Duplicate record ID|记录 ID 重复/)
     expect(() => normalizeProplanDatabase({ version: 1, projects: [project, project] })).toThrow(
-      '项目 ID 重复'
+      /Duplicate project ID|项目 ID 重复/
     )
     expect(() => normalizeProplanDatabase({ version: 1, projects: [{ ...project, memos: null }] })).toThrow(
-      '列表无效'
+      /invalid .* list|列表无效/
     )
   })
 })

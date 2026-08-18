@@ -10,11 +10,11 @@
       <header class="project-titlebar drag-region">
         <div class="project-heading">
           <strong>Proplan</strong>
-          <span class="pane-label">项目</span>
+          <span class="pane-label">{{ systemText('projects') }}</span>
         </div>
         <button
           class="icon-button no-drag"
-          title="新建项目"
+          :title="systemText('newProject')"
           @click="createProject"
         >
           <Plus />
@@ -45,7 +45,7 @@
             />
             <span class="project-row-copy">
               <span class="row-title">{{ project.name }}</span>
-              <span class="row-meta">{{ project.tasks.filter((task) => !task.completed).length }} 项待办</span>
+              <span class="row-meta">{{ systemText('openTaskCount', { count: project.tasks.filter((task) => !task.completed).length }) }}</span>
             </span>
           </button>
         </TransitionGroup>
@@ -55,7 +55,7 @@
           @click="createProject"
         >
           <Plus />
-          新建第一个项目
+          {{ systemText('createFirstProject') }}
         </button>
       </div>
 
@@ -65,7 +65,7 @@
           @click="store.setView('globalTasks')"
         >
           <Finished />
-          <span>我的待办</span>
+          <span>{{ systemText('myTasks') }}</span>
           <span class="nav-count">{{ openTaskCount }}</span>
         </button>
       </nav>
@@ -73,7 +73,7 @@
 
     <div
       class="pane-resizer"
-      title="拖动调整项目列表宽度；双击恢复默认"
+      :title="systemText('resizeProjects')"
       @pointerdown="startResize('project', $event)"
       @dblclick="projectWidth = PROJECT_MIN"
     />
@@ -85,29 +85,29 @@
       <header class="record-header drag-region">
         <template v-if="view === 'globalTasks'">
           <div class="record-heading">
-            <h2>我的待办</h2>
-            <span class="header-eyebrow">概览</span>
+            <h2>{{ systemText('myTasks') }}</h2>
+            <span class="header-eyebrow">{{ systemText('overview') }}</span>
           </div>
         </template>
         <template v-else-if="selectedProject">
           <input
             class="project-name-input no-drag"
             :value="selectedProject.name"
-            aria-label="项目名称"
+            :aria-label="systemText('projectName')"
             @input="updateProjectName"
           >
           <input
             class="project-description-input no-drag"
             :value="selectedProject.description"
-            aria-label="项目描述"
-            placeholder="添加项目描述"
+            :aria-label="systemText('projectDescription')"
+            :placeholder="systemText('addProjectDescription')"
             @input="updateProjectDescription"
           >
         </template>
         <template v-else>
           <div class="record-heading">
-            <h2>项目</h2>
-            <span class="header-eyebrow">工作区</span>
+            <h2>{{ systemText('projects') }}</h2>
+            <span class="header-eyebrow">{{ systemText('workspace') }}</span>
           </div>
         </template>
       </header>
@@ -120,19 +120,19 @@
           :class="{ active: view === 'memos' }"
           @click="store.setView('memos')"
         >
-          备忘
+          {{ systemText('memos') }}
         </button>
         <button
           :class="{ active: view === 'tasks' }"
           @click="store.setView('tasks')"
         >
-          任务
+          {{ systemText('tasks') }}
         </button>
         <button
           :class="{ active: view === 'timeline' }"
           @click="store.setView('timeline')"
         >
-          时间轴
+          {{ systemText('timelineLabel') }}
         </button>
       </div>
 
@@ -144,13 +144,13 @@
           :class="{ active: globalTaskFilter === 'all' }"
           @click="store.setGlobalTaskFilter('all')"
         >
-          全部待办
+          {{ systemText('allTasks') }}
         </button>
         <button
           :class="{ active: globalTaskFilter === 'today' }"
           @click="store.setGlobalTaskFilter('today')"
         >
-          今日待办
+          {{ systemText('todayTasks') }}
         </button>
       </div>
 
@@ -232,7 +232,7 @@
 
     <div
       class="pane-resizer"
-      title="拖动调整记录列表宽度；双击恢复默认"
+      :title="systemText('resizeRecords')"
       @pointerdown="startResize('record', $event)"
       @dblclick="recordWidth = RECORD_MIN"
     />
@@ -242,8 +242,8 @@
         <header class="detail-header drag-region">
           <button
             class="detail-close-button no-drag"
-            title="关闭编辑器"
-            aria-label="关闭编辑器"
+            :title="systemText('closeEditor')"
+            :aria-label="systemText('closeEditor')"
             @click="store.clearSelectedRecord()"
           >
             <Close />
@@ -252,7 +252,7 @@
             <input
               class="record-title-input"
               :value="selectedRecord.title"
-              aria-label="标题"
+              :aria-label="systemText('title')"
               @input="updateRecordTitle"
             >
           </div>
@@ -265,7 +265,7 @@
               v-if="isTask(selectedRecord)"
               class="due-date-control"
               :class="{ empty: !selectedRecord.dueAt }"
-              title="设置截止日期"
+              :title="systemText('setDueDate')"
               @click.prevent="openDueDatePicker"
             >
               <Calendar aria-hidden="true" />
@@ -277,8 +277,9 @@
                 ref="dueDateInput"
                 class="due-date-input"
                 type="date"
+                :lang="language"
                 :value="selectedRecord.dueAt ?? ''"
-                aria-label="截止日期"
+                :aria-label="systemText('dueDate')"
                 @change="updateDueDate"
               >
             </label>
@@ -286,7 +287,7 @@
               v-else
               class="due-date-control"
               :class="{ empty: !selectedRecord.occurredAt }"
-              title="设置发生日期和时间"
+              :title="systemText('setDateTime')"
               @click.prevent="openRecordDatePicker"
             >
               <Calendar aria-hidden="true" />
@@ -298,8 +299,9 @@
                 ref="recordDateInput"
                 class="due-date-input"
                 type="datetime-local"
+                :lang="language"
                 :value="dateTimeLocalValue(selectedRecord.occurredAt)"
-                aria-label="发生日期和时间"
+                :aria-label="systemText('dateTime')"
                 @change="updateTimelineDate"
               >
             </label>
@@ -325,6 +327,7 @@
         v-else-if="view === 'globalTasks'"
         :items="globalCalendarItems"
         :today-key="currentDateKey"
+        :locale="language"
         @select-item="openGlobalCalendarItem"
       />
 
@@ -332,6 +335,7 @@
         v-else-if="selectedProject"
         :items="projectCalendarItems"
         :today-key="currentDateKey"
+        :locale="language"
         @select-item="openProjectCalendarItem"
       />
 
@@ -348,7 +352,7 @@
           @click="createProject"
         >
           <Plus />
-          新建项目
+          {{ systemText('newProject') }}
         </button>
       </div>
     </main>
@@ -366,7 +370,7 @@
         @click="removeContextTarget"
       >
         <Delete />
-        删除
+        {{ systemText('delete') }}
       </button>
     </div>
   </div>
@@ -394,6 +398,12 @@ import type {
 import { useProplanStore, type ProplanRecord } from '@/store/proplan'
 import { usePreferencesStore } from '@/store/preferences'
 import notice from '@/services/notification'
+import {
+  formatLocaleDate,
+  systemTextForLocale,
+  type SystemTextKey,
+  type SystemTextParams
+} from '@/util/systemLocale'
 import ProplanMarkdownEditor from './ProplanMarkdownEditor.vue'
 import ProplanTaskCalendar from './ProplanTaskCalendar.vue'
 
@@ -401,7 +411,11 @@ const PROJECT_MIN = 196
 const RECORD_MIN = 260
 const store = useProplanStore()
 const preferencesStore = usePreferencesStore()
-const { autoSave } = storeToRefs(preferencesStore)
+const { autoSave, language } = storeToRefs(preferencesStore)
+const systemText = (key: SystemTextKey, params: SystemTextParams = {}): string =>
+  systemTextForLocale(language.value, key, params)
+const formatSystemDate = (date: Date, options: Intl.DateTimeFormatOptions): string =>
+  formatLocaleDate(language.value, date, options)
 const {
   projects,
   records,
@@ -456,7 +470,7 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
       title: memo.title,
       date: memo.createdAt.slice(0, 10),
       color: project.color,
-      context: '备忘' as const,
+      context: systemText('memo'),
       kind: 'memos' as const
     })),
     ...project.tasks.map((task) => ({
@@ -464,7 +478,7 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
       title: task.title,
       date: task.dueAt,
       color: project.color,
-      context: '任务' as const,
+      context: systemText('task'),
       kind: 'tasks' as const,
       completed: task.completed
     })),
@@ -473,59 +487,68 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
       title: entry.title,
       date: entry.occurredAt.slice(0, 10),
       color: project.color,
-      context: '时间轴' as const,
+      context: systemText('timeline'),
       kind: 'timeline' as const
     }))
   ]
 })
-const recordCountLabel = computed(() => `${records.value.length} 项`)
+const recordCountLabel = computed(() => systemText('itemCount', { count: records.value.length }))
 const newRecordLabel = computed(() => {
-  if (view.value === 'tasks' || view.value === 'globalTasks') return '新建任务'
-  if (view.value === 'timeline') return '新建时间节点'
-  return '新建备忘'
+  if (view.value === 'tasks' || view.value === 'globalTasks') return systemText('newTask')
+  if (view.value === 'timeline') return systemText('newTimelineEntry')
+  return systemText('newMemo')
 })
 const emptyRecordLabel = computed(() => {
   if (view.value === 'globalTasks') {
-    return globalTaskFilter.value === 'today' ? '今天没有待办任务' : '没有待办任务'
+    return globalTaskFilter.value === 'today' ? systemText('noTodayTasks') : systemText('noTasks')
   }
-  if (view.value === 'tasks') return '还没有任务'
-  if (view.value === 'timeline') return '还没有时间节点'
-  return '还没有备忘'
+  if (view.value === 'tasks') return systemText('noTasks')
+  if (view.value === 'timeline') return systemText('noTimelineEntries')
+  return systemText('noMemos')
 })
 const detailEmptyTitle = computed(() => {
-  if (!selectedProject.value && view.value !== 'globalTasks') return '从一个项目开始'
-  if (view.value === 'globalTasks') return '没有可显示的任务'
+  if (!selectedProject.value && view.value !== 'globalTasks') return systemText('startWithProject')
+  if (view.value === 'globalTasks') return systemText('noTasksToDisplay')
   return emptyRecordLabel.value
 })
 const saveStatus = computed(() => {
-  if (saveError.value) return '保存失败'
-  if (saving.value) return '正在保存…'
-  if (hasUnsavedChanges.value) return autoSave.value ? '等待自动保存' : '有未保存更改'
-  if (lastSavedAt.value && lastSaveKind.value) {
-    const date = lastSavedAt.value
-    const time = [date.getHours(), date.getMinutes(), date.getSeconds()]
-      .map((part) => String(part).padStart(2, '0'))
-      .join(':')
-    return `${lastSaveKind.value === 'manual' ? '手动保存成功' : '自动保存成功'} ${time}`
+  if (saveError.value) return systemText('saveFailed')
+  if (saving.value) return systemText('saving')
+  if (hasUnsavedChanges.value) {
+    return autoSave.value ? systemText('waitingAutoSave') : systemText('unsavedChanges')
   }
-  if (!autoSave.value) return '退出时保存'
-  return '无未保存更改'
+  if (lastSavedAt.value) {
+    const date = lastSavedAt.value
+    const time = formatSystemDate(date, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+    if (lastSaveKind.value) {
+      return `${systemText(lastSaveKind.value === 'manual' ? 'manualSaveSucceeded' : 'autoSaveSucceeded')} ${time}`
+    }
+    return `${systemText('lastSaved')} ${time}`
+  }
+  if (!autoSave.value) return systemText('saveOnExit')
+  return systemText('noUnsavedChanges')
 })
 const canReorderRecords = computed(
   () => view.value === 'memos' || view.value === 'tasks' || view.value === 'globalTasks'
 )
 const dueDateLabel = computed(() => {
   const record = selectedRecord.value
-  if (!record || !isTask(record) || !record.dueAt) return '截止日期'
+  if (!record || !isTask(record) || !record.dueAt) return systemText('dueDate')
   const [year, month, day] = record.dueAt.split('-').map(Number)
   if (!year || !month || !day) return record.dueAt
-  return year === new Date().getFullYear()
-    ? `${month}月${day}日`
-    : `${year}年${month}月${day}日`
+  return formatSystemDate(new Date(year, month - 1, day), {
+    ...(year === new Date().getFullYear() ? {} : { year: 'numeric' }),
+    month: 'short',
+    day: 'numeric'
+  })
 })
 const timelineDateLabel = computed(() => {
   const record = selectedRecord.value
-  if (!record || !isTimeline(record) || !record.occurredAt) return '发生日期和时间'
+  if (!record || !isTimeline(record) || !record.occurredAt) return systemText('dateTime')
   return formatDateTime(record.occurredAt)
 })
 
@@ -572,10 +595,10 @@ const removeContextTarget = (): void => {
   closeRecordContextMenu()
   if (!target) return
   if (target.kind === 'project') {
-    if (window.confirm(`确定删除“${target.title}”及其中的全部记录吗？`)) {
+    if (window.confirm(systemText('deleteProjectConfirm', { title: target.title }))) {
       store.deleteProject(target.id)
     }
-  } else if (window.confirm(`确定删除“${target.title}”吗？`)) {
+  } else if (window.confirm(systemText('deleteRecordConfirm', { title: target.title }))) {
     store.deleteRecord(target.id)
   }
 }
@@ -593,7 +616,7 @@ const performManualSave = async (): Promise<void> => {
     await store.flushSave('manual')
   } catch (error) {
     await notice.notify({
-      title: '保存失败',
+      title: systemText('saveFailed'),
       message: error instanceof Error ? error.message : String(error),
       type: 'error'
     })
@@ -684,7 +707,7 @@ const dateTimeLocalValue = (value: string): string => {
 const formatDateTime = (value: string): string => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value.replace('T', ' ')
-  return date.toLocaleString('zh-CN', {
+  return formatSystemDate(date, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -708,9 +731,13 @@ const openProjectCalendarItem = (recordId: string, section: ProplanSection): voi
 }
 
 const recordMeta = (record: ProplanRecord): string => {
-  if (isTask(record)) return record.dueAt ? `截止 ${record.dueAt}` : '无截止日期'
+  if (isTask(record)) {
+    return record.dueAt
+      ? systemText('due', { date: record.dueAt })
+      : systemText('noDueDate')
+  }
   if (isTimeline(record)) return formatDateTime(record.occurredAt)
-  return new Date(record.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  return formatSystemDate(new Date(record.updatedAt), { month: 'short', day: 'numeric' })
 }
 
 type ResizePane = 'project' | 'record'
@@ -748,8 +775,10 @@ const closeAfterSave = async (): Promise<void> => {
   } catch (error) {
     closing = false
     await notice.notify({
-      title: '无法关闭 Proplan',
-      message: `保存失败，窗口已保持打开：${error instanceof Error ? error.message : String(error)}`,
+      title: systemText('cannotClose'),
+      message: systemText('saveFailedWindowOpen', {
+        error: error instanceof Error ? error.message : String(error)
+      }),
       type: 'error',
       time: 15000
     })
@@ -768,7 +797,7 @@ onMounted(() => {
   store.initialize().catch((error) => {
     notice
       .notify({
-        title: '无法读取 Proplan 数据',
+        title: systemText('cannotReadData'),
         message: error instanceof Error ? error.message : String(error),
         type: 'error',
         time: 20000

@@ -106,6 +106,46 @@ describe('proplan store', () => {
     expect(store.lastSaveKind).toBe('manual')
   })
 
+  it('shows the selected record saved time and falls back to the current time', async() => {
+    vi.setSystemTime(new Date('2026-08-18T10:11:12.000Z'))
+    load.mockResolvedValue({
+      version: 1,
+      globalTaskOrder: [],
+      projects: [
+        {
+          id: 'project-1',
+          name: '项目',
+          description: '',
+          color: '#4f7c6a',
+          createdAt: '2026-08-17T01:00:00.000Z',
+          updatedAt: '2026-08-17T02:00:00.000Z',
+          memos: [
+            {
+              id: 'memo-1',
+              title: '已有备忘',
+              markdown: '',
+              createdAt: '2026-08-17T01:00:00.000Z',
+              updatedAt: '2026-08-17T08:09:10.000Z'
+            }
+          ],
+          tasks: [],
+          timeline: []
+        }
+      ]
+    })
+    const store = useProplanStore()
+    await store.initialize()
+
+    store.selectRecord('memo-1')
+    expect(store.lastSavedAt?.toISOString()).toBe('2026-08-17T08:09:10.000Z')
+    expect(store.lastSaveKind).toBeNull()
+
+    const created = store.createRecord('memos')
+    expect(created).not.toBeNull()
+    expect(store.lastSavedAt?.toISOString()).toBe('2026-08-18T10:11:12.000Z')
+    expect(store.lastSaveKind).toBeNull()
+  })
+
   it('reports explicit save failures to callers and keeps the error message', async() => {
     const store = useProplanStore()
     await store.initialize()

@@ -121,6 +121,11 @@ class Preference extends TypedEmitter<PreferenceEvents> {
       this.store.set('titleBarStyle', 'native')
     }
 
+    const language = this.store.get('language')
+    if (typeof language !== 'string' || !isLanguageSupported(language)) {
+      this.store.set('language', this._getSystemLanguage() ?? 'en')
+    }
+
     this._listenForIpcMain()
   }
 

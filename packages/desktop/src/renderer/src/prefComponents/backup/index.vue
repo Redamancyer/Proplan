@@ -5,15 +5,22 @@
     <section class="backup-section">
       <h6>{{ t('preferences.backup.create.title') }}</h6>
       <p>{{ t('preferences.backup.create.description') }}</p>
-      <el-button :icon="Download" :loading="backingUp" @click="createBackup">
+      <el-button
+        :icon="Download"
+        :loading="backingUp"
+        @click="createBackup"
+      >
         {{ t('preferences.backup.create.button') }}
       </el-button>
-      <div v-if="lastBackupPath" class="result-path">
+      <div
+        v-if="lastBackupPath"
+        class="result-path"
+      >
         <span>{{ lastBackupPath }}</span>
         <el-button
           text
           :icon="FolderOpened"
-          :title="t('preferences.backup.showInFolder')"
+          :title="systemText('showInFolder')"
           @click="showLastBackup"
         />
       </div>
@@ -28,7 +35,11 @@
         <WarningFilled />
         <span>{{ t('preferences.backup.restore.warning') }}</span>
       </p>
-      <el-button :icon="Upload" :loading="restoring" @click="restoreBackup">
+      <el-button
+        :icon="Upload"
+        :loading="restoring"
+        @click="restoreBackup"
+      >
         {{ t('preferences.backup.restore.button') }}
       </el-button>
       <p class="safety-note">
@@ -43,9 +54,16 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download, FolderOpened, Upload, WarningFilled } from '@element-plus/icons-vue'
 import notice from '@/services/notification'
+import {
+  systemTextForLocale,
+  type SystemTextKey,
+  type SystemTextParams
+} from '@/util/systemLocale'
 import Separator from '../common/separator/index.vue'
 
-const { t } = useI18n()
+const { locale, t } = useI18n()
+const systemText = (key: SystemTextKey, params: SystemTextParams = {}): string =>
+  systemTextForLocale(locale.value, key, params)
 const backingUp = ref(false)
 const restoring = ref(false)
 const lastBackupPath = ref('')
@@ -60,13 +78,13 @@ const createBackup = async (): Promise<void> => {
     if (result.status !== 'saved') return
     lastBackupPath.value = result.filePath ?? ''
     await notice.notify({
-      title: t('preferences.backup.create.successTitle'),
-      message: t('preferences.backup.create.successMessage', { count: result.assetCount ?? 0 }),
+      title: systemText('backupSucceeded'),
+      message: systemText('backupSuccessMessage', { count: result.assetCount ?? 0 }),
       type: 'primary'
     })
   } catch (error) {
     await notice.notify({
-      title: t('preferences.backup.create.failureTitle'),
+      title: systemText('backupFailed'),
       message: errorMessage(error),
       type: 'error'
     })
@@ -79,21 +97,21 @@ const restoreBackup = async (): Promise<void> => {
   restoring.value = true
   try {
     const result = await window.proplan.restore({
-      confirmTitle: t('preferences.backup.restore.confirmTitle'),
-      confirmMessage: t('preferences.backup.restore.confirmMessage'),
-      confirmDetail: t('preferences.backup.restore.confirmDetail'),
-      confirmButton: t('preferences.backup.restore.confirmButton'),
-      cancelButton: t('preferences.backup.restore.cancelButton')
+      confirmTitle: systemText('restoreConfirmTitle'),
+      confirmMessage: systemText('restoreConfirmMessage'),
+      confirmDetail: systemText('restoreConfirmDetail'),
+      confirmButton: systemText('restoreConfirmButton'),
+      cancelButton: systemText('cancel')
     })
     if (result.status !== 'restored') return
     await notice.notify({
-      title: t('preferences.backup.restore.successTitle'),
-      message: t('preferences.backup.restore.successMessage', { count: result.assetCount ?? 0 }),
+      title: systemText('restoreSucceeded'),
+      message: systemText('restoreSuccessMessage', { count: result.assetCount ?? 0 }),
       type: 'primary'
     })
   } catch (error) {
     await notice.notify({
-      title: t('preferences.backup.restore.failureTitle'),
+      title: systemText('restoreFailed'),
       message: errorMessage(error),
       type: 'error'
     })
