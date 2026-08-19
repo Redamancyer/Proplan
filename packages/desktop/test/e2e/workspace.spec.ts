@@ -303,48 +303,53 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.proplan-editor-host')).toContainText('撤销快捷键测试')
   })
 
-  test('filters every project list from the date picker beside the project name', async() => {
-    const nameInput = page.locator('.project-name-input')
-    const dateFilter = page.locator('.project-filter-date-picker')
-    await expect(dateFilter).toBeVisible()
-    await expect(dateFilter.locator('.el-input__inner')).toHaveAttribute('placeholder', '筛选日期')
+  test('filters project lists by multiple selected calendar dates', async() => {
+    await page.getByTitle('关闭编辑器').click()
+    await expect(page.locator('.project-filter-date-picker')).toHaveCount(0)
 
-    const headerLayout = await page.locator('.project-name-row').evaluate((row) => {
-      const name = row.querySelector<HTMLElement>('.project-name-input')?.getBoundingClientRect()
-      const picker = row
-        .querySelector<HTMLElement>('.project-filter-date-picker')
-        ?.getBoundingClientRect()
-      return {
-        nameRight: name?.right ?? 0,
-        pickerLeft: picker?.left ?? 0,
-        pickerWidth: picker?.width ?? 0
-      }
-    })
-    expect(headerLayout.pickerLeft).toBeGreaterThanOrEqual(headerLayout.nameRight)
-    expect(headerLayout.pickerWidth).toBeLessThan(120)
-    await expect(nameInput).toBeVisible()
+    const clearDates = page.getByRole('button', { name: '清除', exact: true })
+    const day19 = page.locator('.calendar-day[data-date="2026-08-19"]')
+    const day20 = page.locator('.calendar-day[data-date="2026-08-20"]')
+    const day21 = page.locator('.calendar-day[data-date="2026-08-21"]')
+    await expect(clearDates).toBeDisabled()
 
-    await dateFilter.click()
-    await page
-      .locator('.el-picker-panel:visible td.available:not(.prev-month):not(.next-month)')
-      .filter({ hasText: /^20$/ })
-      .click()
-    await expect(dateFilter.locator('.el-input__inner')).toHaveValue('2026/08/20')
+    const restingBackground = await day21.evaluate(
+      (element) => getComputedStyle(element).backgroundColor
+    )
+    await day21.hover()
+    const hoverBackground = await day21.evaluate(
+      (element) => getComputedStyle(element).backgroundColor
+    )
+    expect(hoverBackground).not.toBe(restingBackground)
+
+    await day20.click()
+    await expect(day20).toHaveClass(/selected/)
+    await expect(clearDates).toBeEnabled()
 
     await page.getByRole('button', { name: '备忘', exact: true }).click()
     await expect(page.locator('.record-row')).toHaveCount(0)
 
+    await day19.locator('.day-heading').click()
+    await expect(day19).toHaveClass(/selected/)
+    await expect(page.locator('.calendar-day.selected')).toHaveCount(2)
+    await expect(page.locator('.record-row')).toHaveCount(3)
+
+    await day19.locator('.calendar-task').first().click()
+    await expect(page.locator('.proplan-editor-host')).toBeVisible()
+    await page.getByTitle('关闭编辑器').click()
+    await expect(page.locator('.calendar-day.selected')).toHaveCount(2)
+
     await page.getByRole('button', { name: '任务', exact: true }).click()
-    await expect(page.locator('.incomplete-task-list .record-row')).toHaveCount(0)
+    await expect(page.locator('.incomplete-task-list .record-row')).toHaveCount(1)
     await expect(page.locator('.completed-task-list .record-row')).toHaveCount(0)
 
     await page.getByRole('button', { name: '时间轴', exact: true }).click()
-    await expect(page.locator('.record-row')).toHaveCount(0)
+    await expect(page.locator('.record-row')).toHaveCount(2)
 
-    await dateFilter.hover()
-    await dateFilter.locator('.el-input__suffix-inner > .el-icon').click()
+    await clearDates.click()
+    await expect(page.locator('.calendar-day.selected')).toHaveCount(0)
+    await expect(clearDates).toBeDisabled()
     await expect(page.locator('.record-row .row-title')).toHaveText(['较晚节点', '较早节点'])
-    await expect(page.locator('.el-picker-panel:visible')).toHaveCount(0)
   })
 
   test('handles zoom shortcuts before the focused editor can consume them', async() => {

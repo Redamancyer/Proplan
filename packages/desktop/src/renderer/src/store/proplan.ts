@@ -113,7 +113,7 @@ export const useProplanStore = defineStore('proplan', () => {
   const view = ref<ProplanView>('memos')
   const globalTaskFilter = ref<GlobalTaskFilter>('all')
   const projectTaskFilter = ref<ProjectTaskFilter>('incomplete')
-  const projectDateFilter = ref<string | null>(null)
+  const projectDateFilters = ref<string[]>([])
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   const lastSavedSnapshot = ref('')
   const savedRecordTimes = new Map<string, string>()
@@ -154,10 +154,13 @@ export const useProplanStore = defineStore('proplan', () => {
     allGlobalTasks.value.filter(({ task }) => !task.completed)
   )
   const matchesProjectDate = (record: ProplanRecord): boolean => {
-    if (!projectDateFilter.value) return true
-    if ('completed' in record) return record.dueAt === projectDateFilter.value
-    if ('occurredAt' in record) return record.occurredAt.slice(0, 10) === projectDateFilter.value
-    return record.createdAt.slice(0, 10) === projectDateFilter.value
+    if (projectDateFilters.value.length === 0) return true
+    const recordDate = 'completed' in record
+      ? record.dueAt
+      : 'occurredAt' in record
+        ? record.occurredAt.slice(0, 10)
+        : record.createdAt.slice(0, 10)
+    return recordDate !== null && projectDateFilters.value.includes(recordDate)
   }
   const filteredProjectMemos = computed<ProplanMemo[]>(() =>
     (selectedProject.value?.memos ?? []).filter(matchesProjectDate)
@@ -293,12 +296,13 @@ export const useProplanStore = defineStore('proplan', () => {
     view.value = 'memos'
     globalTaskFilter.value = 'all'
     projectTaskFilter.value = 'incomplete'
-    projectDateFilter.value = null
+    projectDateFilters.value = []
     loaded.value = true
     saveError.value = ''
   }
 
   const selectProject = (projectId: string): void => {
+    if (selectedProjectId.value !== projectId) projectDateFilters.value = []
     selectedProjectId.value = projectId
     if (view.value === 'globalTasks') view.value = 'memos'
     selectedRecordId.value = null
@@ -322,8 +326,17 @@ export const useProplanStore = defineStore('proplan', () => {
     selectedRecordId.value = null
   }
 
-  const setProjectDateFilter = (date: string | null): void => {
-    projectDateFilter.value = date || null
+  const toggleProjectDateFilter = (date: string): void => {
+    const selectedDates = new Set(projectDateFilters.value)
+    if (selectedDates.has(date)) selectedDates.delete(date)
+    else selectedDates.add(date)
+    projectDateFilters.value = [...selectedDates].sort()
+    selectedRecordId.value = null
+  }
+
+  const clearProjectDateFilters = (): void => {
+    if (projectDateFilters.value.length === 0) return
+    projectDateFilters.value = []
     selectedRecordId.value = null
   }
 
@@ -361,6 +374,7 @@ export const useProplanStore = defineStore('proplan', () => {
       timeline: []
     }
     database.value.projects.push(project)
+    projectDateFilters.value = []
     selectedProjectId.value = project.id
     selectedRecordId.value = null
     view.value = 'memos'
@@ -394,6 +408,7 @@ export const useProplanStore = defineStore('proplan', () => {
     }
     if (selectedProjectId.value === projectId) {
       const next = projects.value[Math.min(index, projects.value.length - 1)] ?? null
+      projectDateFilters.value = []
       selectedProjectId.value = next?.id ?? null
       selectedRecordId.value = null
       view.value = 'memos'
@@ -540,7 +555,7 @@ export const useProplanStore = defineStore('proplan', () => {
     filteredProjectTimeline,
     globalTaskFilter,
     projectTaskFilter,
-    projectDateFilter,
+    projectDateFilters,
     view,
     initialize,
     reloadFromDisk,
@@ -548,7 +563,8 @@ export const useProplanStore = defineStore('proplan', () => {
     setView,
     setGlobalTaskFilter,
     setProjectTaskFilter,
-    setProjectDateFilter,
+    toggleProjectDateFilter,
+    clearProjectDateFilters,
     selectRecord,
     clearSelectedRecord,
     refreshCurrentDate,

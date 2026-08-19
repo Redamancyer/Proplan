@@ -300,7 +300,7 @@ describe('proplan store', () => {
     expect(store.records.map((record) => record.title)).toEqual(['明天完成'])
   })
 
-  it('filters every project section by its record date without changing task sorting', async() => {
+  it('filters every project section by multiple record dates without changing task sorting', async() => {
     const store = useProplanStore()
     await store.initialize()
     store.createProject()
@@ -342,7 +342,7 @@ describe('proplan store', () => {
 
     store.setView('memos')
     store.selectRecord(olderMemo.id)
-    store.setProjectDateFilter('2026-08-19')
+    store.toggleProjectDateFilter('2026-08-19')
     expect(store.selectedRecord).toBeNull()
     expect(store.records.map((record) => record.id)).toEqual([selectedMemo.id])
     expect(store.filteredProjectMemos.map((record) => record.id)).toEqual([selectedMemo.id])
@@ -357,7 +357,18 @@ describe('proplan store', () => {
       selectedTimeline.id
     ])
 
-    store.setProjectDateFilter(null)
+    store.toggleProjectDateFilter('2026-08-18')
+    expect(store.projectDateFilters).toEqual(['2026-08-18', '2026-08-19'])
+    expect(store.records.map((record) => record.id)).toEqual([
+      selectedTimeline.id,
+      olderTimeline.id
+    ])
+
+    store.toggleProjectDateFilter('2026-08-19')
+    expect(store.records.map((record) => record.id)).toEqual([olderTimeline.id])
+
+    store.clearProjectDateFilters()
+    expect(store.projectDateFilters).toEqual([])
     expect(store.records.map((record) => record.id)).toEqual([
       selectedTimeline.id,
       olderTimeline.id

@@ -90,29 +90,12 @@
           </div>
         </template>
         <template v-else-if="selectedProject">
-          <div class="project-name-row">
-            <input
-              class="project-name-input no-drag"
-              :value="selectedProject.name"
-              :aria-label="systemText('projectName')"
-              @input="updateProjectName"
-            >
-            <el-date-picker
-              ref="projectDateFilterPicker"
-              class="proplan-date-picker project-filter-date-picker no-drag"
-              style="width: auto; --el-date-editor-width: auto"
-              :class="{ empty: !projectDateFilter }"
-              :model-value="projectDateFilter"
-              type="date"
-              format="YYYY/MM/DD"
-              value-format="YYYY-MM-DD"
-              :placeholder="systemText('filterDate')"
-              :aria-label="systemText('filterByDate')"
-              :title="systemText('filterByDate')"
-              :editable="false"
-              @update:model-value="updateProjectDateFilter"
-            />
-          </div>
+          <input
+            class="project-name-input no-drag"
+            :value="selectedProject.name"
+            :aria-label="systemText('projectName')"
+            @input="updateProjectName"
+          >
           <input
             class="project-description-input no-drag"
             :value="selectedProject.description"
@@ -485,7 +468,11 @@
         :items="projectCalendarItems"
         :today-key="currentDateKey"
         :locale="language"
+        :selected-dates="projectDateFilters"
+        selectable-dates
         @select-item="openProjectCalendarItem"
+        @toggle-date="store.toggleProjectDateFilter"
+        @clear-dates="store.clearProjectDateFilters"
       />
 
       <div
@@ -528,7 +515,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { DatePickerInstance } from 'element-plus'
 import {
   ArrowDown,
   ArrowUp,
@@ -589,11 +575,8 @@ const {
   globalTasks,
   incompleteProjectTasks,
   completedProjectTasks,
-  filteredProjectMemos,
-  filteredProjectTasks,
-  filteredProjectTimeline,
   globalTaskFilter,
-  projectDateFilter,
+  projectDateFilters,
   selectedProject,
   selectedProjectId,
   selectedRecord,
@@ -609,7 +592,6 @@ const {
 } = storeToRefs(store)
 const projectWidth = ref(PROJECT_MIN)
 const recordWidth = ref(RECORD_MIN)
-const projectDateFilterPicker = ref<DatePickerInstance>()
 const completedDrawerExpanded = ref(false)
 const draggedProjectId = ref<string | null>(null)
 const draggedRecordId = ref<string | null>(null)
@@ -639,7 +621,7 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
   const project = selectedProject.value
   if (!project) return []
   return [
-    ...filteredProjectMemos.value.map((memo) => ({
+    ...project.memos.map((memo) => ({
       id: memo.id,
       title: memo.title,
       date: memo.createdAt.slice(0, 10),
@@ -647,7 +629,7 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
       context: systemText('memo'),
       kind: 'memos' as const
     })),
-    ...filteredProjectTasks.value.map((task) => ({
+    ...project.tasks.map((task) => ({
       id: task.id,
       title: task.title,
       date: task.dueAt,
@@ -657,7 +639,7 @@ const projectCalendarItems = computed<ProplanCalendarItem[]>(() => {
       completed: task.completed,
       priority: task.priority
     })),
-    ...filteredProjectTimeline.value.map((entry) => ({
+    ...project.timeline.map((entry) => ({
       id: entry.id,
       title: entry.title,
       date: entry.occurredAt.slice(0, 10),
@@ -728,7 +710,7 @@ const createProject = (): void => {
 }
 
 const createRecord = (): void => {
-  if (projectDateFilter.value) store.setProjectDateFilter(null)
+  if (projectDateFilters.value.length > 0) store.clearProjectDateFilters()
   if (view.value === 'tasks') completedDrawerExpanded.value = false
   store.createRecord()
 }
@@ -856,15 +838,6 @@ const updateProjectName = (event: Event): void => {
 const updateProjectDescription = (event: Event): void => {
   if (selectedProject.value) {
     store.updateProject(selectedProject.value.id, { description: eventValue(event) })
-  }
-}
-const updateProjectDateFilter = (value: string | null): void => {
-  store.setProjectDateFilter(value)
-  if (!value) {
-    window.setTimeout(() => {
-      projectDateFilterPicker.value?.handleClose()
-      projectDateFilterPicker.value?.blur()
-    }, 0)
   }
 }
 const updateRecordTitle = (event: Event): void =>
@@ -1315,17 +1288,7 @@ button {
   color: var(--text);
   background: transparent;
 }
-.project-name-row {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .project-name-input {
-  width: auto;
-  min-width: 0;
-  flex: 1 1 auto;
   height: var(--header-title-line-height);
   font-size: var(--header-title-size);
   font-weight: 680;
@@ -1733,12 +1696,6 @@ button {
 }
 :deep(.task-date-picker .el-input__inner) {
   width: 10ch;
-}
-:deep(.project-filter-date-picker .el-input__inner) {
-  width: 10ch;
-}
-:deep(.project-filter-date-picker.empty .el-input__inner) {
-  width: 7ch;
 }
 :deep(.task-date-picker.empty .el-input__inner) {
   width: 8ch;

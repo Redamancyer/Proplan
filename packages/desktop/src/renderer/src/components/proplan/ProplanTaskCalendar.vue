@@ -11,6 +11,15 @@
 
       <div class="calendar-actions no-drag">
         <button
+          v-if="selectableDates"
+          class="clear-dates-button"
+          :disabled="selectedDates.length === 0"
+          :title="systemText('clearDateFilters')"
+          @click="emit('clearDates')"
+        >
+          {{ systemText('clearDateFilters') }}
+        </button>
+        <button
           class="today-button"
           @click="goToToday"
         >
@@ -47,7 +56,20 @@
         v-for="day in visibleDays"
         :key="day.key"
         class="calendar-day"
-        :class="{ outside: !day.inCurrentMonth, today: day.isToday }"
+        :class="{
+          outside: !day.inCurrentMonth,
+          today: day.isToday,
+          selectable: selectableDates,
+          selected: selectedDateSet.has(day.key)
+        }"
+        :data-date="day.key"
+        :role="selectableDates ? 'button' : undefined"
+        :tabindex="selectableDates ? 0 : undefined"
+        :aria-label="selectableDates ? systemText('filterCalendarDate', { date: day.label }) : undefined"
+        :aria-pressed="selectableDates ? selectedDateSet.has(day.key) : undefined"
+        @click="toggleDate(day.key)"
+        @keydown.enter.prevent="toggleDate(day.key)"
+        @keydown.space.prevent="toggleDate(day.key)"
       >
         <div class="day-heading">
           <span class="day-number">{{ day.dayNumber }}</span>
@@ -64,7 +86,7 @@
             class="calendar-task"
             :class="{ completed: item.completed }"
             :title="`${item.context} · ${item.title}`"
-            @click="emit('selectItem', item.id, item.kind)"
+            @click.stop="emit('selectItem', item.id, item.kind)"
           >
             <span
               class="task-project-mark"
@@ -103,11 +125,19 @@ import {
   type SystemTextParams
 } from '@/util/systemLocale'
 
-const props = defineProps<{
-  items: ProplanCalendarItem[]
-  todayKey: string
-  locale: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    items: ProplanCalendarItem[]
+    todayKey: string
+    locale: string
+    selectableDates?: boolean
+    selectedDates?: string[]
+  }>(),
+  {
+    selectableDates: false,
+    selectedDates: () => []
+  }
+)
 
 const systemText = (key: SystemTextKey, params: SystemTextParams = {}): string =>
   systemTextForLocale(props.locale, key, params)
@@ -118,6 +148,8 @@ const priorityColor = (priority: ProplanTaskPriority): string =>
 
 const emit = defineEmits<{
   selectItem: [itemId: string, kind: ProplanSection]
+  toggleDate: [date: string]
+  clearDates: []
 }>()
 
 const weekdays = computed(() =>
@@ -136,6 +168,7 @@ const dateKey = (date: Date): string => {
 }
 
 const visibleMonthKey = computed(() => dateKey(visibleMonth.value).slice(0, 7))
+const selectedDateSet = computed(() => new Set(props.selectedDates))
 const monthTitle = computed(() =>
   formatSystemDate(visibleMonth.value, { year: 'numeric', month: 'long' })
 )
@@ -171,11 +204,16 @@ const visibleDays = computed(() => {
     return {
       key,
       dayNumber: date.getDate(),
+      label: formatSystemDate(date, { year: 'numeric', month: 'long', day: 'numeric' }),
       inCurrentMonth: date.getMonth() === month,
       isToday: key === props.todayKey
     }
   })
 })
+
+const toggleDate = (date: string): void => {
+  if (props.selectableDates) emit('toggleDate', date)
+}
 
 const changeMonth = (offset: number): void => {
   visibleMonth.value = new Date(
@@ -265,6 +303,14 @@ button {
 .calendar-actions button:hover {
   background: var(--editorColor10);
 }
+.calendar-actions button:disabled {
+  opacity: 0.42;
+  background: var(--editorBgColor);
+}
+.clear-dates-button {
+  padding: 0 10px;
+  font-size: 11px;
+}
 .today-button {
   padding: 0 11px;
   font-size: 11px;
@@ -313,6 +359,22 @@ button {
   border-right: 1px solid var(--editorColor10);
   border-bottom: 1px solid var(--editorColor10);
   background: var(--editorBgColor);
+}
+.calendar-day.selectable {
+  cursor: pointer;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+.calendar-day.selectable:hover {
+  background: color-mix(in srgb, var(--themeColor) 9%, var(--editorBgColor));
+}
+.calendar-day.selectable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--themeColor) 65%, transparent);
+  outline-offset: -2px;
+}
+.calendar-day.selected,
+.calendar-day.outside.selected {
+  background: color-mix(in srgb, var(--themeColor) 14%, var(--editorBgColor));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--themeColor) 55%, transparent);
 }
 .calendar-day:nth-child(7n) {
   border-right: 0;
