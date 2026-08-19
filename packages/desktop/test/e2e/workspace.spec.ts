@@ -349,6 +349,119 @@ test.describe('Proplan workspace interactions', () => {
     const fontSize = settings.locator('.pref-range-item', { hasText: '字体大小' }).first()
     await fontSize.locator('[role="slider"]').press('ArrowUp')
     await expect(page.locator('.mu-container')).toHaveCSS('font-size', '17px')
+    const fontSliderBox = await fontSize.locator('.el-slider__runway').boundingBox()
+    if (!fontSliderBox) throw new Error('expected font-size slider bounds')
+    await page.mouse.move(fontSliderBox.x + 4, fontSliderBox.y + fontSliderBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(
+      fontSliderBox.x + fontSliderBox.width * 0.75,
+      fontSliderBox.y + fontSliderBox.height / 2,
+      { steps: 5 }
+    )
+    await expect(page.locator('.mu-container')).not.toHaveCSS('font-size', '17px')
+    await page.mouse.up()
+
+    await page.evaluate(() =>
+      window.electron.ipcRenderer.send('mt::set-user-preference', {
+        lineHeight: 1.8,
+        editorFontFamily: 'Arial',
+        codeFontSize: 18,
+        codeFontFamily: 'Courier New',
+        wrapCodeBlocks: true,
+        textDirection: 'rtl',
+        hideQuickInsertHint: true
+      })
+    )
+    await expect.poll(() =>
+      page.locator('.proplan-editor-host').evaluate((element) => ({
+        direction: element.getAttribute('dir'),
+        lineHeight: element.style.getPropertyValue('--mu-line-height'),
+        codeFontSize: element.style.getPropertyValue('--mu-code-font-size'),
+        wrapsCode: element.classList.contains('mu-code-wrap'),
+        showsQuickInsertHint: element.classList.contains('mu-show-quick-insert-hint')
+      }))
+    ).toEqual({
+      direction: 'rtl',
+      lineHeight: '1.8',
+      codeFontSize: '18px',
+      wrapsCode: true,
+      showsQuickInsertHint: false
+    })
+    await expect.poll(() =>
+      page.locator('.proplan-editor-host').evaluate((element) =>
+        element.style.getPropertyValue('--mu-font-family')
+      )
+    ).toContain('Arial')
+    await expect.poll(() =>
+      page.locator('.proplan-editor-host').evaluate((element) =>
+        element.style.getPropertyValue('--mu-code-font-family')
+      )
+    ).toContain('Courier New')
+
+    await settings.getByText('拼写', { exact: true }).click()
+    const spellingEnabled = settings.locator('.pref-switch-item', { hasText: '启用拼写检查' })
+    await spellingEnabled.locator('.el-switch').click()
+    await expect(page.locator('.proplan-editor-host')).toHaveAttribute('spellcheck', 'true')
+    await expect.poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.webContents.session.isSpellCheckerEnabled()
+      )
+    ).toBe(true)
+    const hideSpellingMarks = settings.locator('.pref-switch-item', {
+      hasText: '隐藏拼写错误标记'
+    })
+    await hideSpellingMarks.locator('.el-switch').click()
+    await expect(page.locator('.proplan-editor-host')).toHaveClass(/mu-hide-spelling-marks/)
+
+    await settings.getByText('主题', { exact: true }).click()
+    const followSystem = settings.locator('.pref-switch-item', { hasText: '跟随系统主题' })
+    const followSystemInput = followSystem.locator('[role="switch"]')
+    if ((await followSystemInput.getAttribute('aria-checked')) === 'true') {
+      await followSystem.locator('.el-switch').click()
+    }
+    await settings.locator('.offcial-themes .theme.dark').click()
+    await expect(page.locator('body')).toHaveClass(/dark/)
+    await settings.locator('.offcial-themes .theme.light').click()
+    await expect(page.locator('body')).not.toHaveClass(/dark/)
+
+    await followSystem.locator('.el-switch').click()
+    const systemUsesDarkColors = await app.evaluate(({ nativeTheme }) =>
+      nativeTheme.shouldUseDarkColors
+    )
+    await page.evaluate(
+      ({ key, value }) =>
+        window.electron.ipcRenderer.send('mt::set-user-preference', { [key]: value }),
+      {
+        key: systemUsesDarkColors ? 'darkModeTheme' : 'lightModeTheme',
+        value: systemUsesDarkColors ? 'light' : 'dark'
+      }
+    )
+    await expect.poll(() => page.locator('body').evaluate((body) => body.classList.contains('dark')))
+      .toBe(!systemUsesDarkColors)
+    await followSystem.locator('.el-switch').click()
+    await settings.locator('.offcial-themes .theme.light').click()
+
+    const customCss = settings.locator('.custom-css-input')
+    await customCss.fill('.proplan-editor-host { outline: 7px solid rgb(1, 2, 3); }')
+    await expect.poll(() => page.locator('#custom-styles').textContent()).toContain(
+      'outline: 7px solid rgb(1, 2, 3)'
+    )
+    await expect(customCss).toBeFocused()
+
+    await page.evaluate(() =>
+      window.electron.ipcRenderer.send('mt::set-user-preference', {
+        customCss: '',
+        textDirection: 'ltr',
+        spellcheckerEnabled: false,
+        spellcheckerNoUnderline: false
+      })
+    )
+    await expect(page.locator('.proplan-editor-host')).toHaveAttribute('spellcheck', 'false')
+    await expect.poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.webContents.session.isSpellCheckerEnabled()
+      )
+    ).toBe(false)
     await page.keyboard.press('Escape')
     await expect(settings).not.toBeVisible()
   })

@@ -55,6 +55,7 @@ const {
   preferLooseListItem,
   sequenceTheme,
   spellcheckerEnabled,
+  spellcheckerLanguage,
   spellcheckerNoUnderline,
   superSubScript,
   tabSize,
@@ -69,6 +70,7 @@ const locales: Record<string, ILocale> = {
   'zh-CN': zhCN
 }
 const editorLocale = computed(() => locales[language.value] ?? en)
+const isOsx = window.electron.process.platform === 'darwin'
 const systemText = (key: SystemTextKey): string => systemTextForLocale(language.value, key)
 const resolveEditorFont = (family: string): string =>
   family ? `${family}, ${DEFAULT_EDITOR_FONT_FAMILY}` : DEFAULT_EDITOR_FONT_FAMILY
@@ -205,6 +207,28 @@ watch(
 )
 
 watch(editorLocale, (locale) => editor?.locale(locale))
+watch(textDirection, (direction) => editor?.domNode.setAttribute('dir', direction))
+
+let spellcheckerSyncVersion = 0
+watch(
+  [spellcheckerEnabled, spellcheckerLanguage],
+  async ([enabled, spellcheckerLocale]) => {
+    const syncVersion = ++spellcheckerSyncVersion
+    try {
+      if (!isOsx && enabled) {
+        await window.electron.ipcRenderer.invoke(
+          'mt::spellchecker-switch-language',
+          spellcheckerLocale
+        )
+        if (syncVersion !== spellcheckerSyncVersion) return
+      }
+      await window.electron.ipcRenderer.invoke('mt::spellchecker-set-enabled', enabled)
+    } catch (error) {
+      console.error('Failed to synchronize native spell checker preferences.', error)
+    }
+  },
+  { immediate: true }
+)
 
 watch(
   preferenceOptions,

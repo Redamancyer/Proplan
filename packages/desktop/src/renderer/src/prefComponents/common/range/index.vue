@@ -28,7 +28,7 @@
       :max="max"
       :format-tooltip="(value: number) => value + (unit ? unit : '')"
       :step="step"
-      @change="select"
+      @input="select"
     />
   </section>
 </template>

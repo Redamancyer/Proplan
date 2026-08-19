@@ -1,4 +1,4 @@
-import { computed, ref, toRaw } from 'vue'
+import { computed, ref, toRaw, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { usePreferencesStore } from './preferences'
 import { systemTextForLocale } from '@/util/systemLocale'
@@ -234,6 +234,17 @@ export const useProplanStore = defineStore('proplan', () => {
       flushSave('auto').catch(() => undefined)
     }, Math.max(1000, preferences.autoSaveDelay))
   }
+
+  watch(
+    () => [preferences.autoSave, preferences.autoSaveDelay] as const,
+    () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer)
+        saveTimer = null
+      }
+      if (preferences.autoSave && hasUnsavedChanges.value) scheduleSave()
+    }
+  )
 
   const touchProject = (project: ProplanProject): void => {
     project.updatedAt = now()

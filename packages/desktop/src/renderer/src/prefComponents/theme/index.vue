@@ -58,7 +58,7 @@
         class="custom-css-input"
         rows="10"
         :value="customCss"
-        @change="
+        @input="
           (event: Event) =>
             onSelectChange('customCss', (event.target as HTMLTextAreaElement).value)
         "

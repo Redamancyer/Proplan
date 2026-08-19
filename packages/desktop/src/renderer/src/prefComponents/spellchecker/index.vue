@@ -139,13 +139,8 @@ const getAvailableDictionaries = async (): Promise<PrefSelectOption<string>[]> =
   })
 }
 
-const handleSpellcheckerLanguage = async (languageCode: string | number | boolean): Promise<void> => {
+const handleSpellcheckerLanguage = (languageCode: string | number | boolean): void => {
   onSelectChange('spellcheckerLanguage', languageCode)
-
-  await window.electron.ipcRenderer.invoke(
-    'mt::spellchecker-switch-language',
-    String(languageCode)
-  )
 }
 
 const handleSpellcheckerEnabled = (isEnabled: boolean): void => {

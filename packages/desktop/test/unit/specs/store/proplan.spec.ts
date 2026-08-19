@@ -81,6 +81,34 @@ describe('proplan store', () => {
     expect(save).toHaveBeenCalledOnce()
   })
 
+  it('applies auto-save enablement and delay changes to pending edits immediately', async() => {
+    const preferences = usePreferencesStore()
+    const store = useProplanStore()
+    await store.initialize()
+
+    store.createProject()
+    preferences.autoSave = false
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(save).not.toHaveBeenCalled()
+
+    preferences.autoSave = true
+    preferences.autoSaveDelay = 2000
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(save).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(save).toHaveBeenCalledOnce()
+
+    const project = store.database.projects[0]
+    if (!project) throw new Error('expected project')
+    store.updateProject(project.id, { description: 'pending change' })
+    await vi.advanceTimersByTimeAsync(1000)
+    preferences.autoSaveDelay = 3000
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(save).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(save).toHaveBeenCalledTimes(2)
+  })
+
   it('skips unchanged auto-saves and records successful save kind and time', async() => {
     vi.setSystemTime(new Date('2026-08-18T08:09:10.000Z'))
     const store = useProplanStore()
