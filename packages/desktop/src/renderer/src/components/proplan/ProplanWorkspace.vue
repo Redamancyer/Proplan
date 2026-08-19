@@ -532,7 +532,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   ArrowDown,
@@ -945,8 +945,14 @@ const openGlobalCalendarItem = (taskId: string): void => {
   store.selectRecord(taskId)
 }
 
-const openProjectCalendarItem = (recordId: string, section: ProplanSection): void => {
+const openProjectCalendarItem = async (recordId: string, section: ProplanSection): Promise<void> => {
   store.setView(section)
+  await nextTick()
+  if (section === 'tasks') {
+    const completed = selectedProject.value?.tasks.find((task) => task.id === recordId)?.completed
+    completedDrawerExpanded.value = completed === true
+    store.setProjectTaskFilter(completed ? 'completed' : 'incomplete')
+  }
   store.selectRecord(recordId)
 }
 
