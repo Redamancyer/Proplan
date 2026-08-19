@@ -41,7 +41,6 @@ export interface IpcSendChannels {
   'mt::ask-for-user-preference': []
   'mt::check-for-update': []
   'mt::clipboard::write-text': [text: string]
-  'mt::close-setting-window': []
   'mt::close-window': []
   'mt::get-current-language': []
   'mt::handle-renderer-error': [error: unknown]
@@ -49,7 +48,7 @@ export interface IpcSendChannels {
   'mt::proplan::flush-before-backup-complete': [requestId: string, error?: string]
   'mt::set-user-preference': [partial: Record<string, unknown>]
   'mt::shell::show-item': [fullPath: string]
-  'settings::close-animation-complete': []
+  'mt::settings-dialog-visibility': [visible: boolean]
   'mt::win::close': []
   'mt::win::maximize': []
   'mt::win::minimize': []
@@ -77,11 +76,8 @@ export interface IpcMainEventChannels {
   'mt::proplan::flush-before-backup': [requestId: string]
   'mt::proplan::editor-command': [command: 'undo' | 'redo']
   'mt::proplan::restored': []
-  'mt::settings-window-visibility': [visible: boolean]
+  'mt::show-settings-dialog': [category?: string]
   'mt::user-preference': [partial: Record<string, unknown>]
-  'settings::change-tab': [category?: string]
-  'settings::request-close': []
-  'settings::window-shown': []
 }
 
 export interface BootInfo {

@@ -14,7 +14,6 @@ onMounted(() => autoUpdatesStore.LISTEN_FOR_UPDATE())
 <template>
   <div id="app">
     <el-config-provider :locale="elementLocale">
-      <!-- This router-view will render either App component (/editor) or Preference component (/preference) -->
       <router-view />
     </el-config-provider>
   </div>

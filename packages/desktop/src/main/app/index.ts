@@ -15,7 +15,6 @@ import { getThemeBackgroundColor } from '../../common/theme'
 import {
   isOsx,
   mainWindowOptions,
-  preferencesWindowOptions,
   shouldUseNativeTitleBar,
   TITLE_BAR_HEIGHT
 } from '../config'
@@ -29,7 +28,6 @@ import type Accessor from './accessor'
 const ZOOM_FACTOR_STEP = 0.1
 const MIN_ZOOM_FACTOR = 0.5
 const MAX_ZOOM_FACTOR = 2
-const SETTINGS_CLOSE_FALLBACK_MS = 500
 
 const setContentsZoom = (contents: Electron.WebContents, delta?: number): void => {
   const nextFactor = delta === undefined ? 1 : contents.getZoomFactor() + delta
@@ -39,10 +37,7 @@ const setContentsZoom = (contents: Electron.WebContents, delta?: number): void =
 
 class App {
   private mainWindow: BrowserWindow | null = null
-  private settingsWindow: BrowserWindow | null = null
-  private settingsClosing = false
-  private allowSettingsClose = false
-  private settingsCloseTimer: ReturnType<typeof setTimeout> | null = null
+  private settingsDialogVisible = false
   private allowMainClose = false
   private themeListenerRegistered = false
   private readonly applicationIcon = nativeImage.createFromPath(
@@ -129,13 +124,13 @@ class App {
     this.createMainWindow()
   }
 
-  private rendererUrl(type: 'editor' | 'settings'): string {
+  private rendererUrl(): string {
     const baseUrl =
       process.env.NODE_ENV === 'development'
         ? process.env.ELECTRON_RENDERER_URL!
         : `file://${path.join(__dirname, '../renderer/index.html')}`
     const url = new URL(baseUrl)
-    url.searchParams.set('type', type)
+    url.searchParams.set('type', 'editor')
     url.searchParams.set('debug', this.accessor.env.debug ? '1' : '0')
     return url.toString()
   }
@@ -179,98 +174,29 @@ class App {
     })
     window.on('closed', () => {
       this.mainWindow = null
+      this.settingsDialogVisible = false
       this.allowMainClose = false
     })
     window.webContents.on('render-process-gone', (_event, details) => {
       log.error(`Main renderer exited: ${details.reason} (${details.exitCode})`)
     })
-    window.loadURL(this.rendererUrl('editor'))
+    window.loadURL(this.rendererUrl())
   }
 
   private openSettings(category?: string): void {
-    if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-      if (this.settingsClosing) return
-      this.settingsWindow.webContents.send('settings::change-tab', category)
-      this.centerSettingsWindow()
-      this.setSettingsOverlay(true)
-      this.settingsWindow.show()
-      this.settingsWindow.focus()
-      return
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) this.createMainWindow()
+    const window = this.mainWindow
+    if (!window || window.isDestroyed()) return
+
+    this.focusMainWindow()
+    const showDialog = (): void => {
+      if (!window.isDestroyed()) window.webContents.send('mt::show-settings-dialog', category)
     }
-    const window = new BrowserWindow({
-      ...this.windowOptions(preferencesWindowOptions),
-      parent: this.mainWindow ?? undefined,
-      show: false,
-      ...(isOsx ? { backgroundColor: '#00000000', transparent: true } : {})
-    })
-    this.settingsWindow = window
-    this.settingsClosing = false
-    this.allowSettingsClose = false
-    window.setSheetOffset(TITLE_BAR_HEIGHT)
-    this.centerSettingsWindow()
-    this.setSettingsOverlay(true)
-    window.once('ready-to-show', () => {
-      this.centerSettingsWindow()
-      window.show()
-      window.webContents.send('settings::window-shown')
-      window.focus()
-    })
-    window.on('close', (event) => {
-      if (this.allowSettingsClose) return
-      event.preventDefault()
-      this.requestSettingsClose()
-    })
-    window.on('closed', () => {
-      if (this.settingsCloseTimer) clearTimeout(this.settingsCloseTimer)
-      this.settingsCloseTimer = null
-      this.settingsWindow = null
-      this.settingsClosing = false
-      this.allowSettingsClose = false
-      this.setSettingsOverlay(false)
-    })
-    window.loadURL(this.rendererUrl('settings'))
-  }
-
-  private centerSettingsWindow(): void {
-    if (
-      !this.mainWindow ||
-      this.mainWindow.isDestroyed() ||
-      !this.settingsWindow ||
-      this.settingsWindow.isDestroyed()
-    ) {
-      return
+    if (window.webContents.isLoadingMainFrame()) {
+      window.webContents.once('did-finish-load', showDialog)
+    } else {
+      showDialog()
     }
-    const parentBounds = this.mainWindow.getBounds()
-    const settingsBounds = this.settingsWindow.getBounds()
-    this.settingsWindow.setPosition(
-      Math.round(parentBounds.x + (parentBounds.width - settingsBounds.width) / 2),
-      Math.round(parentBounds.y + (parentBounds.height - settingsBounds.height) / 2)
-    )
-  }
-
-  private setSettingsOverlay(visible: boolean): void {
-    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
-    this.mainWindow.webContents.send('mt::settings-window-visibility', visible)
-  }
-
-  private requestSettingsClose(): void {
-    const window = this.settingsWindow
-    if (!window || window.isDestroyed() || this.settingsClosing) return
-    this.settingsClosing = true
-    this.setSettingsOverlay(false)
-    window.webContents.send('settings::request-close')
-    this.settingsCloseTimer = setTimeout(
-      () => this.finishSettingsClose(window),
-      SETTINGS_CLOSE_FALLBACK_MS
-    )
-  }
-
-  private finishSettingsClose(window: BrowserWindow): void {
-    if (window !== this.settingsWindow || window.isDestroyed()) return
-    if (this.settingsCloseTimer) clearTimeout(this.settingsCloseTimer)
-    this.settingsCloseTimer = null
-    this.allowSettingsClose = true
-    window.close()
   }
 
   private focusMainWindow(): void {
@@ -312,14 +238,9 @@ class App {
     })
     ipcMain.on('mt::open-setting-window', (_event, category?: string) => this.openSettings(category))
     onInternalChannel('app-create-settings-window', (category?: string) => this.openSettings(category))
-    ipcMain.on('mt::close-setting-window', (event) => {
+    ipcMain.on('mt::settings-dialog-visibility', (event, visible: boolean) => {
       if (BrowserWindow.fromWebContents(event.sender) !== this.mainWindow) return
-      this.requestSettingsClose()
-    })
-    ipcMain.on('settings::close-animation-complete', (event) => {
-      const window = BrowserWindow.fromWebContents(event.sender)
-      if (!window || window !== this.settingsWindow || !this.settingsClosing) return
-      this.finishSettingsClose(window)
+      this.settingsDialogVisible = Boolean(visible)
     })
     ipcMain.on('mt::close-window', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender)
@@ -347,7 +268,7 @@ class App {
       const contents =
         window instanceof BrowserWindow ? window.webContents : this.mainWindow?.webContents
       if (!contents) return
-      if (contents === this.settingsWindow?.webContents) {
+      if (this.settingsDialogVisible) {
         if (command === 'undo') contents.undo()
         else contents.redo()
         return

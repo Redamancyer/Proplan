@@ -32,18 +32,4 @@ export const mainWindowOptions: Readonly<BrowserWindowConstructorOptions> = Obje
   titleBarStyle: 'hiddenInset'
 })
 
-export const preferencesWindowOptions: Readonly<BrowserWindowConstructorOptions> = Object.freeze({
-  minWidth: 620,
-  minHeight: 480,
-  width: 950,
-  height: 650,
-  webPreferences,
-  fullscreenable: false,
-  minimizable: false,
-  useContentSize: true,
-  show: true,
-  frame: false,
-  thickFrame: !isOsx
-})
-
 export const TITLE_BAR_HEIGHT = isOsx ? 21 : 32

@@ -16,7 +16,6 @@ interface PrefCategory {
   name: string
   label: string
   icon: unknown
-  path: string
 }
 
 interface PreferenceSchemaEntry {
@@ -112,50 +111,42 @@ export const getCategory = (): PrefCategory[] => [
   {
     name: t('preferences.categories.general'),
     label: 'general',
-    icon: GeneralIcon,
-    path: '/preference/general'
+    icon: GeneralIcon
   },
   {
     name: t('preferences.categories.editor'),
     label: 'editor',
-    icon: EditorIcon,
-    path: '/preference/editor'
+    icon: EditorIcon
   },
   {
     name: t('preferences.categories.markdown'),
     label: 'markdown',
-    icon: MarkdownIcon,
-    path: '/preference/markdown'
+    icon: MarkdownIcon
   },
   {
     name: t('preferences.categories.spelling'),
     label: 'spelling',
-    icon: SpellIcon,
-    path: '/preference/spelling'
+    icon: SpellIcon
   },
   {
     name: t('preferences.categories.theme'),
     label: 'theme',
-    icon: ThemeIcon,
-    path: '/preference/theme'
+    icon: ThemeIcon
   },
   {
     name: t('preferences.categories.image'),
     label: 'image',
-    icon: ImageIcon,
-    path: '/preference/image'
+    icon: ImageIcon
   },
   {
     name: t('preferences.categories.keybindings'),
     label: 'keybindings',
-    icon: KeybindingsIcon,
-    path: '/preference/keybindings'
+    icon: KeybindingsIcon
   },
   {
     name: t('preferences.categories.backup'),
     label: 'backup',
-    icon: BackupIcon,
-    path: '/preference/backup'
+    icon: BackupIcon
   }
 ]
 

@@ -337,10 +337,9 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.mu-container')).toBeVisible()
 
     await page.evaluate(() => window.electron.ipcRenderer.send('mt::open-setting-window', 'editor'))
-    await expect.poll(() => app.windows().length).toBe(2)
-    const settings = app.windows().find((window) => window !== page)
-    if (!settings) throw new Error('settings window did not open')
-    await settings.locator('.category .item', { hasText: '编辑器' }).click()
+    await expect.poll(() => app.windows().length).toBe(1)
+    const settings = page.locator('.preferences-dialog')
+    await expect(settings).toBeVisible()
     await expect(settings.locator('.pref-editor')).toBeVisible()
 
     const maxWidth = settings.locator('.pref-text-box-item', { hasText: '最大宽度' }).locator('input')
@@ -350,77 +349,77 @@ test.describe('Proplan workspace interactions', () => {
     const fontSize = settings.locator('.pref-range-item', { hasText: '字体大小' }).first()
     await fontSize.locator('[role="slider"]').press('ArrowUp')
     await expect(page.locator('.mu-container')).toHaveCSS('font-size', '17px')
-    await settings.close()
+    await page.keyboard.press('Escape')
+    await expect(settings).not.toBeVisible()
   })
 
-  test('centers settings over the main window and closes it from the backdrop', async() => {
+  test('presents settings inside the main window and closes it from the backdrop', async() => {
     await page.evaluate(() => window.electron.ipcRenderer.send('mt::open-setting-window'))
-    await expect.poll(() => app.windows().length).toBe(2)
-    const settings = app.windows().find((window) => window !== page)
-    if (!settings) throw new Error('settings window did not open')
-    await expect(settings.locator('.pref-container')).toBeVisible()
-    await expect(settings.locator('.pref-container')).toHaveClass(/is-visible/)
-    await expect(page.locator('.settings-window-backdrop')).toBeVisible()
-
-    const centers = await app.evaluate(({ BrowserWindow }) => {
-      const windows = BrowserWindow.getAllWindows()
-      const main = windows.find((window) => !window.getParentWindow())?.getBounds()
-      const preferences = windows.find((window) => window.getParentWindow())?.getBounds()
-      return {
-        horizontal: main && preferences
-          ? Math.abs(main.x + main.width / 2 - (preferences.x + preferences.width / 2))
-          : -1,
-        vertical: main && preferences
-          ? Math.abs(main.y + main.height / 2 - (preferences.y + preferences.height / 2))
-          : -1
-      }
-    })
-    expect(centers.horizontal).toBeLessThanOrEqual(1)
-    expect(centers.vertical).toBeLessThanOrEqual(1)
-
-    await page.locator('.settings-window-backdrop').click({ position: { x: 8, y: 8 } })
-    await expect(settings.locator('.pref-container')).toHaveClass(/is-closing/)
     await expect.poll(() => app.windows().length).toBe(1)
-    await expect(page.locator('.settings-window-backdrop')).toHaveCount(0)
+    const settings = page.locator('.preferences-dialog')
+    const overlay = page.locator('.preferences-dialog-overlay')
+    await expect(settings).toBeVisible()
+    await expect(overlay).toBeVisible()
+
+    await expect.poll(async() => {
+      return settings.evaluate((element) => {
+        const bounds = element.getBoundingClientRect()
+        return Math.max(
+          Math.abs(window.innerWidth / 2 - (bounds.left + bounds.width / 2)),
+          Math.abs(window.innerHeight / 2 - (bounds.top + bounds.height / 2))
+        )
+      })
+    }).toBeLessThanOrEqual(1)
+
+    await page.locator('.preferences-dialog-overlay .el-overlay-dialog').click({
+      position: { x: 8, y: 8 }
+    })
+    await expect(settings).not.toBeVisible()
+    await expect(overlay).not.toBeVisible()
   })
 
   test('shows fixed common shortcuts in settings', async() => {
+    if ((await page.locator('.project-row').count()) === 0) {
+      await page.getByRole('button', { name: '新建第一个项目' }).click()
+      await expect(page.locator('.project-description-input')).toBeVisible()
+    }
+
+    await page.evaluate(() =>
+      window.electron.ipcRenderer.send('mt::set-user-preference', { zoomFactor: 1 })
+    )
+    await expect.poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0]?.webContents.getZoomFactor()
+      )
+    ).toBe(1)
+
     const openSettings = async(): Promise<Page> => {
       await page.evaluate(() => window.electron.ipcRenderer.send('mt::open-setting-window'))
-      await expect.poll(() => app.windows().length).toBe(2)
-      const settingsWindow = app.windows().find((window) => window !== page)
-      if (!settingsWindow) throw new Error('settings window did not open')
-      await expect(settingsWindow.locator('.pref-container')).toBeVisible()
-      return settingsWindow
+      await expect.poll(() => app.windows().length).toBe(1)
+      await expect(page.locator('.preferences-dialog')).toBeVisible()
+      return page
     }
     let settings = await openSettings()
-    if (!settings) throw new Error('settings window did not open')
-    await expect.poll(() =>
-      settings.evaluate(() => document.documentElement.classList.contains('preference-window'))
-    ).toBe(true)
     const hiddenPreferenceScrollbars = await settings.evaluate(() => {
-      const content = document.querySelector('.pref-setting')
+      const content = document.querySelector('.preferences-dialog .pref-setting')
       const categories = document.querySelector('.pref-sidebar .category')
       return {
-        rootMarked: document.documentElement.classList.contains('preference-window'),
         content: content ? getComputedStyle(content, '::-webkit-scrollbar').display : '',
         categories: categories ? getComputedStyle(categories, '::-webkit-scrollbar').display : ''
       }
     })
     expect(hiddenPreferenceScrollbars).toEqual({
-      rootMarked: true,
       content: 'none',
       categories: 'none'
     })
-    await expect(page.locator('.proplan-editor-host')).toHaveCSS('scrollbar-width', 'auto')
     const zoom = settings.locator('.pref-range-item', { hasText: '缩放比例' })
-    await expect(zoom.locator('.value')).toHaveText('110 %')
+    await expect(zoom.locator('.value')).toHaveText('100 %')
     await zoom.locator('[role="slider"]').press('ArrowUp')
     await expect.poll(() =>
       app.evaluate(({ BrowserWindow }) =>
         BrowserWindow.getAllWindows().map((window) => window.webContents.getZoomFactor())
       )
-    ).toEqual([1.2, 1.2])
+    ).toEqual([1.1])
     await settings.locator('.pref-general .el-select').click()
     await expect(settings.locator('.el-select-dropdown__item:visible')).toHaveCount(2)
     await settings.locator('.el-select-dropdown__item:visible', { hasText: 'English' }).click()
@@ -429,10 +428,13 @@ test.describe('Proplan workspace interactions', () => {
       'Add project description'
     )
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
-    await settings.close()
-    await expect(page.locator('.settings-window-backdrop')).toHaveCount(0)
+    await page.locator('.preferences-dialog .el-dialog__headerbtn').click()
+    await expect(page.locator('.preferences-dialog')).not.toBeVisible()
 
     await page.getByRole('button', { name: 'Tasks', exact: true }).click()
+    if ((await page.locator('.record-row').count()) === 0) {
+      await page.getByTitle('New task').click()
+    }
     await page.locator('.record-row').first().click()
     await page.getByLabel('Due date').click()
     await expect(page.locator('.el-picker-panel:visible')).toContainText('SunMonTueWedThuFriSat')
@@ -446,8 +448,8 @@ test.describe('Proplan workspace interactions', () => {
       '添加项目描述'
     )
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
-    await settings.close()
-    await expect(page.locator('.settings-window-backdrop')).toHaveCount(0)
+    await page.locator('.preferences-dialog .el-dialog__headerbtn').click()
+    await expect(page.locator('.preferences-dialog')).not.toBeVisible()
 
     await page.getByLabel('截止日期').click()
     await expect(page.locator('.el-picker-panel:visible')).toContainText('日一二三四五六')
@@ -482,7 +484,8 @@ test.describe('Proplan workspace interactions', () => {
     await expect(settings.locator('.pref-keybindings')).not.toContainText(
       /自定义键盘快捷键|Customize keyboard shortcuts/
     )
-    await settings.close()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.preferences-dialog')).not.toBeVisible()
   })
 
   test('restores the saved zoom factor after relaunching', async() => {

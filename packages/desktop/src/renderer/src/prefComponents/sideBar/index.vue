@@ -1,8 +1,5 @@
 <template>
   <div class="pref-sidebar">
-    <h3 class="title">
-      {{ t('preferences.title') }}
-    </h3>
     <section class="search-wrapper">
       <el-autocomplete
         v-model="state"
@@ -31,7 +28,7 @@
         v-for="c of getCategory()"
         :key="c.name"
         class="item"
-        :class="{ active: c.label === currentCategory }"
+        :class="{ active: c.label === props.activeCategory }"
         @click="handleCategoryItemClick(c)"
       >
         <component :is="c.icon" />
@@ -42,8 +39,7 @@
 </template>
 <script setup lang="ts">
 import { getCategory, getTranslatedSearchContent } from './config'
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, watch, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 
@@ -60,24 +56,22 @@ interface SearchEntry {
 
 interface CategoryItem {
   name: string
-  path: string
+  label: string
 }
 
-const { t } = useI18n()
+const props = withDefaults(defineProps<{ activeCategory?: string }>(), {
+  activeCategory: 'general'
+})
+const emit = defineEmits<{ selectCategory: [category: string] }>()
+const { t, locale } = useI18n()
 
-const router = useRouter()
-const route = useRoute()
-
-const currentCategory = ref<string>('general')
 const restaurants = ref<SearchEntry[]>([])
 const state = ref<string>('')
 
 watch(
-  () => route.name,
-  (newRouteName) => {
-    if (newRouteName) {
-      currentCategory.value = String(newRouteName)
-    }
+  locale,
+  () => {
+    restaurants.value = loadAll()
   }
 )
 
@@ -110,50 +104,16 @@ const handleSelect = (item: SearchEntry | null | undefined): void => {
   // Use a safe routeCategory to avoid a blank screen caused by invalid categories
   const target =
     item && item.routeCategory ? item.routeCategory : (item?.category || 'general').toLowerCase()
-  router.push({ path: `/preference/${target}` }).catch(() => {})
+  const category = getCategory().some(({ label }) => label === target) ? target : 'general'
+  emit('selectCategory', category)
 }
 
 const handleCategoryItemClick = (item: CategoryItem): void => {
-  if (item.name.toLowerCase() !== currentCategory.value) {
-    router.push({
-      path: item.path
-    })
-  }
-}
-
-const onIpcCategoryChange = (_event: unknown, category: unknown): void => {
-  const categoryName = typeof category === 'string' ? category : ''
-  const validRoute =
-    categoryName &&
-    router.getRoutes().findIndex((r) => r.path.endsWith(`/${categoryName}`)) !== -1
-  if (validRoute) {
-    router.push({
-      path: `/preference/${categoryName}`
-    })
-  }
+  if (item.label !== props.activeCategory) emit('selectCategory', item.label)
 }
 
 onMounted(() => {
   restaurants.value = loadAll()
-  if (route.name) {
-    currentCategory.value = String(route.name)
-  }
-  window.electron.ipcRenderer.on('settings::change-tab', onIpcCategoryChange)
-  // Listen for language changes and refresh the search index
-  const languageChanged = (): void => {
-    restaurants.value = loadAll()
-  }
-  window.addEventListener('languageChanged', languageChanged)
-  // Remove listener on unmount
-  onUnmounted(() => window.removeEventListener('languageChanged', languageChanged))
-})
-
-onUnmounted(() => {
-  // removeAllListeners takes a single channel argument. The handler ref was
-  // passed historically but ignored by the typed bridge; removing only the
-  // handler we registered would require holding the unsubscribe callback
-  // returned by `.on`, which is not yet plumbed through here.
-  window.electron.ipcRenderer.removeAllListeners('settings::change-tab')
 })
 </script>
 
@@ -164,23 +124,16 @@ onUnmounted(() => {
   flex-direction: column;
   background: var(--sideBarBgColor);
   width: var(--prefSideBarWidth);
-  height: 100vh;
-  padding-top: 24px;
+  height: 100%;
+  padding-top: 18px;
   box-sizing: border-box;
-  & h3 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: normal;
-    text-align: center;
-    color: var(--sideBarColor);
-  }
 }
-.search-wrapper {
+.pref-sidebar .search-wrapper {
   -webkit-app-region: no-drag;
   padding: 0 16px;
-  margin: 18px 0;
+  margin: 0 0 18px;
 }
-.el-autocomplete {
+.pref-sidebar .el-autocomplete {
   width: 100%;
 
   & .el-input__wrapper {
@@ -225,7 +178,7 @@ onUnmounted(() => {
     }
   }
 }
-.category {
+.pref-sidebar .category {
   -webkit-app-region: no-drag;
   overflow-y: auto;
   & .item {
