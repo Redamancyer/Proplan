@@ -10,6 +10,21 @@
       </div>
 
       <div class="calendar-actions no-drag">
+        <label
+          v-if="searchable"
+          class="calendar-search"
+          :title="systemText('searchProjectRecords')"
+        >
+          <Search aria-hidden="true" />
+          <input
+            type="search"
+            :value="searchQuery"
+            :placeholder="systemText('searchProjectRecords')"
+            :aria-label="systemText('searchProjectRecords')"
+            @input="updateSearchQuery"
+            @keydown.esc="emit('updateSearchQuery', '')"
+          >
+        </label>
         <button
           v-if="selectableDates"
           class="clear-dates-button"
@@ -111,7 +126,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Search } from '@element-plus/icons-vue'
 import {
   PROPLAN_TASK_PRIORITY_COLORS,
   type ProplanCalendarItem,
@@ -132,10 +147,14 @@ const props = withDefaults(
     locale: string
     selectableDates?: boolean
     selectedDates?: string[]
+    searchable?: boolean
+    searchQuery?: string
   }>(),
   {
     selectableDates: false,
-    selectedDates: () => []
+    selectedDates: () => [],
+    searchable: false,
+    searchQuery: ''
   }
 )
 
@@ -150,6 +169,7 @@ const emit = defineEmits<{
   selectItem: [itemId: string, kind: ProplanSection]
   toggleDate: [date: string]
   clearDates: []
+  updateSearchQuery: [query: string]
 }>()
 
 const weekdays = computed(() =>
@@ -213,6 +233,10 @@ const visibleDays = computed(() => {
 
 const toggleDate = (date: string): void => {
   if (props.selectableDates) emit('toggleDate', date)
+}
+
+const updateSearchQuery = (event: Event): void => {
+  emit('updateSearchQuery', (event.target as HTMLInputElement).value)
 }
 
 const changeMonth = (offset: number): void => {
@@ -292,6 +316,50 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+.calendar-search {
+  width: 174px;
+  height: 28px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  border: 1px solid var(--editorColor10);
+  border-radius: 5px;
+  color: var(--editorColor50);
+  background: var(--editorBgColor);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.calendar-search:hover {
+  background: var(--editorColor04);
+}
+.calendar-search:focus-within {
+  border-color: color-mix(in srgb, var(--themeColor) 55%, var(--editorColor10));
+  background: var(--editorBgColor);
+}
+.calendar-search svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+}
+.calendar-search input {
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: var(--editorColor80);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0;
+  background: transparent;
+}
+.calendar-search input::placeholder {
+  color: var(--editorColor40);
+}
+.calendar-search input::-webkit-search-cancel-button {
+  cursor: pointer;
 }
 .calendar-actions button {
   height: 28px;

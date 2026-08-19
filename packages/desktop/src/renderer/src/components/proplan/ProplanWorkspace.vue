@@ -469,10 +469,13 @@
         :today-key="currentDateKey"
         :locale="language"
         :selected-dates="projectDateFilters"
+        :search-query="projectSearchQuery"
         selectable-dates
+        searchable
         @select-item="openProjectCalendarItem"
         @toggle-date="store.toggleProjectDateFilter"
         @clear-dates="store.clearProjectDateFilters"
+        @update-search-query="store.setProjectSearchQuery"
       />
 
       <div
@@ -577,6 +580,7 @@ const {
   completedProjectTasks,
   globalTaskFilter,
   projectDateFilters,
+  projectSearchQuery,
   selectedProject,
   selectedProjectId,
   selectedRecord,
@@ -710,7 +714,6 @@ const createProject = (): void => {
 }
 
 const createRecord = (): void => {
-  if (projectDateFilters.value.length > 0) store.clearProjectDateFilters()
   if (view.value === 'tasks') completedDrawerExpanded.value = false
   store.createRecord()
 }

@@ -300,7 +300,7 @@ describe('proplan store', () => {
     expect(store.records.map((record) => record.title)).toEqual(['明天完成'])
   })
 
-  it('filters every project section by multiple record dates without changing task sorting', async() => {
+  it('filters every project section by dates and title or content without changing sorting', async() => {
     const store = useProplanStore()
     await store.initialize()
     store.createProject()
@@ -331,9 +331,18 @@ describe('proplan store', () => {
 
     olderMemo.createdAt = '2026-08-18T08:00:00.000Z'
     selectedMemo.createdAt = '2026-08-19T08:00:00.000Z'
+    Object.assign(olderMemo, { title: 'Older memo title', markdown: '' })
+    Object.assign(selectedMemo, { title: 'Selected memo', markdown: 'Memo BODY KEYWORD' })
     Object.assign(lowTask, { title: 'Low', priority: 'low', dueAt: '2026-08-19' })
-    Object.assign(highTask, { title: 'High', priority: 'high', dueAt: '2026-08-19' })
+    Object.assign(highTask, {
+      title: 'High',
+      markdown: 'Task body keyword',
+      priority: 'high',
+      dueAt: '2026-08-19'
+    })
     Object.assign(laterTask, { title: 'Later', priority: 'high', dueAt: '2026-08-20' })
+    selectedTimeline.title = 'Timeline keyword title'
+    selectedTimeline.markdown = 'Timeline body keyword'
     store.setView('timeline')
     store.selectRecord(olderTimeline.id)
     store.updateSelectedRecord({ occurredAt: '2026-08-18T16:00:00.000Z' })
@@ -364,6 +373,10 @@ describe('proplan store', () => {
       olderTimeline.id
     ])
 
+    store.setProjectSearchQuery(' timeline KEYWORD title ')
+    expect(store.records.map((record) => record.id)).toEqual([selectedTimeline.id])
+    store.setProjectSearchQuery('')
+
     store.toggleProjectDateFilter('2026-08-19')
     expect(store.records.map((record) => record.id)).toEqual([olderTimeline.id])
 
@@ -373,6 +386,19 @@ describe('proplan store', () => {
       selectedTimeline.id,
       olderTimeline.id
     ])
+
+    store.setView('memos')
+    store.setProjectSearchQuery('older memo')
+    expect(store.records.map((record) => record.id)).toEqual([olderMemo.id])
+
+    store.setProjectSearchQuery('body keyword')
+    expect(store.records.map((record) => record.id)).toEqual([selectedMemo.id])
+
+    store.setView('tasks')
+    expect(store.records.map((record) => record.id)).toEqual([highTask.id])
+
+    store.setView('timeline')
+    expect(store.records.map((record) => record.id)).toEqual([selectedTimeline.id])
   })
 
   it('keeps manual ordering for projects and memos only', async() => {

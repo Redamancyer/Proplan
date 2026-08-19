@@ -308,10 +308,18 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.project-filter-date-picker')).toHaveCount(0)
 
     const clearDates = page.getByRole('button', { name: '清除', exact: true })
+    const projectSearch = page.getByRole('searchbox', { name: '搜索项目记录' })
     const day19 = page.locator('.calendar-day[data-date="2026-08-19"]')
     const day20 = page.locator('.calendar-day[data-date="2026-08-20"]')
     const day21 = page.locator('.calendar-day[data-date="2026-08-21"]')
     await expect(clearDates).toBeDisabled()
+    await expect(projectSearch).toBeVisible()
+    const searchAndClearLayout = await page.locator('.calendar-actions').evaluate((actions) => {
+      const search = actions.querySelector<HTMLElement>('.calendar-search')?.getBoundingClientRect()
+      const clear = actions.querySelector<HTMLElement>('.clear-dates-button')?.getBoundingClientRect()
+      return { searchRight: search?.right ?? 0, clearLeft: clear?.left ?? 0 }
+    })
+    expect(searchAndClearLayout.searchRight).toBeLessThanOrEqual(searchAndClearLayout.clearLeft)
 
     const restingBackground = await day21.evaluate(
       (element) => getComputedStyle(element).backgroundColor
@@ -350,6 +358,18 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.calendar-day.selected')).toHaveCount(0)
     await expect(clearDates).toBeDisabled()
     await expect(page.locator('.record-row .row-title')).toHaveText(['较晚节点', '较早节点'])
+
+    await projectSearch.fill('较晚节点')
+    await expect(page.locator('.record-row .row-title')).toHaveText(['较晚节点'])
+
+    await projectSearch.fill('撤销快捷键测试')
+    await page.getByRole('button', { name: '备忘', exact: true }).click()
+    await expect(page.locator('.record-row .row-title')).toHaveText(['标题'])
+
+    await projectSearch.fill('备忘一')
+    await expect(page.locator('.record-row .row-title')).toHaveText(['备忘一'])
+    await projectSearch.fill('')
+    await expect(page.locator('.record-row')).toHaveCount(3)
   })
 
   test('handles zoom shortcuts before the focused editor can consume them', async() => {
