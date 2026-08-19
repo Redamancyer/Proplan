@@ -370,6 +370,29 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.record-row .row-title')).toHaveText(['备忘一'])
     await projectSearch.fill('')
     await expect(page.locator('.record-row')).toHaveCount(3)
+
+    const memoRow = page.locator('.record-row').first()
+    const memoBackground = await memoRow.evaluate((element) =>
+      getComputedStyle(element).backgroundColor
+    )
+    await memoRow.hover()
+    await expect(memoRow).not.toHaveCSS('background-color', memoBackground)
+
+    await page.getByRole('button', { name: '任务', exact: true }).click()
+    const taskRow = page.locator('.incomplete-task-list .record-row').first()
+    const taskBackground = await taskRow.evaluate((element) =>
+      getComputedStyle(element).backgroundColor
+    )
+    await taskRow.hover()
+    await expect(taskRow).not.toHaveCSS('background-color', taskBackground)
+
+    await page.getByRole('button', { name: '时间轴', exact: true }).click()
+    const timelineRow = page.locator('.record-row').first()
+    const timelineBackground = await timelineRow.evaluate((element) =>
+      getComputedStyle(element).backgroundColor
+    )
+    await timelineRow.hover()
+    await expect(timelineRow).not.toHaveCSS('background-color', timelineBackground)
   })
 
   test('handles zoom shortcuts before the focused editor can consume them', async() => {

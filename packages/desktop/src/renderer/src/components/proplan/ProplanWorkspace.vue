@@ -1422,9 +1422,10 @@ button {
   gap: 9px;
   padding: 8px 9px;
   border-radius: 6px;
+  transition: background-color 140ms ease;
 }
-.record-row:hover {
-  background: var(--editorColor04);
+.record-row:not(.active):not(.dragging):hover {
+  background: var(--editorColor10);
 }
 .record-row.active {
   background: var(--themeColor10);
