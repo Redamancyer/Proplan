@@ -303,6 +303,50 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.proplan-editor-host')).toContainText('撤销快捷键测试')
   })
 
+  test('filters every project list from the date picker beside the project name', async() => {
+    const nameInput = page.locator('.project-name-input')
+    const dateFilter = page.locator('.project-filter-date-picker')
+    await expect(dateFilter).toBeVisible()
+    await expect(dateFilter.locator('.el-input__inner')).toHaveAttribute('placeholder', '筛选日期')
+
+    const headerLayout = await page.locator('.project-name-row').evaluate((row) => {
+      const name = row.querySelector<HTMLElement>('.project-name-input')?.getBoundingClientRect()
+      const picker = row
+        .querySelector<HTMLElement>('.project-filter-date-picker')
+        ?.getBoundingClientRect()
+      return {
+        nameRight: name?.right ?? 0,
+        pickerLeft: picker?.left ?? 0,
+        pickerWidth: picker?.width ?? 0
+      }
+    })
+    expect(headerLayout.pickerLeft).toBeGreaterThanOrEqual(headerLayout.nameRight)
+    expect(headerLayout.pickerWidth).toBeLessThan(120)
+    await expect(nameInput).toBeVisible()
+
+    await dateFilter.click()
+    await page
+      .locator('.el-picker-panel:visible td.available:not(.prev-month):not(.next-month)')
+      .filter({ hasText: /^20$/ })
+      .click()
+    await expect(dateFilter.locator('.el-input__inner')).toHaveValue('2026/08/20')
+
+    await page.getByRole('button', { name: '备忘', exact: true }).click()
+    await expect(page.locator('.record-row')).toHaveCount(0)
+
+    await page.getByRole('button', { name: '任务', exact: true }).click()
+    await expect(page.locator('.incomplete-task-list .record-row')).toHaveCount(0)
+    await expect(page.locator('.completed-task-list .record-row')).toHaveCount(0)
+
+    await page.getByRole('button', { name: '时间轴', exact: true }).click()
+    await expect(page.locator('.record-row')).toHaveCount(0)
+
+    await dateFilter.hover()
+    await dateFilter.locator('.el-input__suffix-inner > .el-icon').click()
+    await expect(page.locator('.record-row .row-title')).toHaveText(['较晚节点', '较早节点'])
+    await expect(page.locator('.el-picker-panel:visible')).toHaveCount(0)
+  })
+
   test('handles zoom shortcuts before the focused editor can consume them', async() => {
     const modifier: 'meta' | 'control' = process.platform === 'darwin' ? 'meta' : 'control'
     const zoomFactor = (): Promise<number> =>
