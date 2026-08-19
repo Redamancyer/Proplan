@@ -1,6 +1,6 @@
 {
   "name": "proplan",
-  "version": "1.0.12",
+  "version": "1.1.1",
   "description": "Proplan project notes and task management desktop app",
   "main": "./out/main/index.js",
   "author": "Redamancyer",
