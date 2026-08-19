@@ -359,6 +359,7 @@ test.describe('Proplan workspace interactions', () => {
     const settings = app.windows().find((window) => window !== page)
     if (!settings) throw new Error('settings window did not open')
     await expect(settings.locator('.pref-container')).toBeVisible()
+    await expect(settings.locator('.pref-container')).toHaveClass(/is-visible/)
     await expect(page.locator('.settings-window-backdrop')).toBeVisible()
 
     const centers = await app.evaluate(({ BrowserWindow }) => {
@@ -378,6 +379,7 @@ test.describe('Proplan workspace interactions', () => {
     expect(centers.vertical).toBeLessThanOrEqual(1)
 
     await page.locator('.settings-window-backdrop').click({ position: { x: 8, y: 8 } })
+    await expect(settings.locator('.pref-container')).toHaveClass(/is-closing/)
     await expect.poll(() => app.windows().length).toBe(1)
     await expect(page.locator('.settings-window-backdrop')).toHaveCount(0)
   })

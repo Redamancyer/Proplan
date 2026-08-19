@@ -29,6 +29,7 @@ import type Accessor from './accessor'
 const ZOOM_FACTOR_STEP = 0.1
 const MIN_ZOOM_FACTOR = 0.5
 const MAX_ZOOM_FACTOR = 2
+const SETTINGS_CLOSE_FALLBACK_MS = 500
 
 const setContentsZoom = (contents: Electron.WebContents, delta?: number): void => {
   const nextFactor = delta === undefined ? 1 : contents.getZoomFactor() + delta
@@ -39,6 +40,9 @@ const setContentsZoom = (contents: Electron.WebContents, delta?: number): void =
 class App {
   private mainWindow: BrowserWindow | null = null
   private settingsWindow: BrowserWindow | null = null
+  private settingsClosing = false
+  private allowSettingsClose = false
+  private settingsCloseTimer: ReturnType<typeof setTimeout> | null = null
   private allowMainClose = false
   private themeListenerRegistered = false
   private readonly applicationIcon = nativeImage.createFromPath(
@@ -185,6 +189,7 @@ class App {
 
   private openSettings(category?: string): void {
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
+      if (this.settingsClosing) return
       this.settingsWindow.webContents.send('settings::change-tab', category)
       this.centerSettingsWindow()
       this.setSettingsOverlay(true)
@@ -195,19 +200,32 @@ class App {
     const window = new BrowserWindow({
       ...this.windowOptions(preferencesWindowOptions),
       parent: this.mainWindow ?? undefined,
-      show: false
+      show: false,
+      ...(isOsx ? { backgroundColor: '#00000000', transparent: true } : {})
     })
     this.settingsWindow = window
+    this.settingsClosing = false
+    this.allowSettingsClose = false
     window.setSheetOffset(TITLE_BAR_HEIGHT)
     this.centerSettingsWindow()
     this.setSettingsOverlay(true)
     window.once('ready-to-show', () => {
       this.centerSettingsWindow()
       window.show()
+      window.webContents.send('settings::window-shown')
       window.focus()
     })
+    window.on('close', (event) => {
+      if (this.allowSettingsClose) return
+      event.preventDefault()
+      this.requestSettingsClose()
+    })
     window.on('closed', () => {
+      if (this.settingsCloseTimer) clearTimeout(this.settingsCloseTimer)
+      this.settingsCloseTimer = null
       this.settingsWindow = null
+      this.settingsClosing = false
+      this.allowSettingsClose = false
       this.setSettingsOverlay(false)
     })
     window.loadURL(this.rendererUrl('settings'))
@@ -233,6 +251,26 @@ class App {
   private setSettingsOverlay(visible: boolean): void {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return
     this.mainWindow.webContents.send('mt::settings-window-visibility', visible)
+  }
+
+  private requestSettingsClose(): void {
+    const window = this.settingsWindow
+    if (!window || window.isDestroyed() || this.settingsClosing) return
+    this.settingsClosing = true
+    this.setSettingsOverlay(false)
+    window.webContents.send('settings::request-close')
+    this.settingsCloseTimer = setTimeout(
+      () => this.finishSettingsClose(window),
+      SETTINGS_CLOSE_FALLBACK_MS
+    )
+  }
+
+  private finishSettingsClose(window: BrowserWindow): void {
+    if (window !== this.settingsWindow || window.isDestroyed()) return
+    if (this.settingsCloseTimer) clearTimeout(this.settingsCloseTimer)
+    this.settingsCloseTimer = null
+    this.allowSettingsClose = true
+    window.close()
   }
 
   private focusMainWindow(): void {
@@ -276,7 +314,12 @@ class App {
     onInternalChannel('app-create-settings-window', (category?: string) => this.openSettings(category))
     ipcMain.on('mt::close-setting-window', (event) => {
       if (BrowserWindow.fromWebContents(event.sender) !== this.mainWindow) return
-      this.settingsWindow?.close()
+      this.requestSettingsClose()
+    })
+    ipcMain.on('settings::close-animation-complete', (event) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (!window || window !== this.settingsWindow || !this.settingsClosing) return
+      this.finishSettingsClose(window)
     })
     ipcMain.on('mt::close-window', (event) => {
       const window = BrowserWindow.fromWebContents(event.sender)

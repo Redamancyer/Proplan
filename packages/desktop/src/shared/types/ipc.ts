@@ -49,6 +49,7 @@ export interface IpcSendChannels {
   'mt::proplan::flush-before-backup-complete': [requestId: string, error?: string]
   'mt::set-user-preference': [partial: Record<string, unknown>]
   'mt::shell::show-item': [fullPath: string]
+  'settings::close-animation-complete': []
   'mt::win::close': []
   'mt::win::maximize': []
   'mt::win::minimize': []
@@ -79,6 +80,8 @@ export interface IpcMainEventChannels {
   'mt::settings-window-visibility': [visible: boolean]
   'mt::user-preference': [partial: Record<string, unknown>]
   'settings::change-tab': [category?: string]
+  'settings::request-close': []
+  'settings::window-shown': []
 }
 
 export interface BootInfo {

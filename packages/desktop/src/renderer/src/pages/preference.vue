@@ -1,5 +1,9 @@
 <template>
-  <div class="pref-container">
+  <div
+    class="pref-container"
+    :class="{ 'is-visible': isVisible, 'is-closing': isClosing }"
+    @transitionend.self="completeClose"
+  >
     <title-bar v-if="showCustomTitleBar" />
     <side-bar />
     <div
@@ -16,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, watch, onMounted, onUnmounted, nextTick, ref } from 'vue'
 import { usePreferencesStore } from '@/store/preferences'
 import { storeToRefs } from 'pinia'
 import TitleBar from '@/prefComponents/common/titlebar.vue'
@@ -27,6 +31,24 @@ const isOsx = window.electron.process.platform === 'darwin'
 
 // Store
 const preferencesStore = usePreferencesStore()
+const isVisible = ref(false)
+const isClosing = ref(false)
+let closeCompleted = false
+
+const removeWindowShownListener = window.electron.ipcRenderer.on('settings::window-shown', () => {
+  requestAnimationFrame(() => {
+    isVisible.value = true
+  })
+})
+const removeCloseListener = window.electron.ipcRenderer.on('settings::request-close', () => {
+  isClosing.value = true
+})
+
+const completeClose = (event: TransitionEvent): void => {
+  if (!isClosing.value || closeCompleted || event.propertyName !== 'opacity') return
+  closeCompleted = true
+  window.electron.ipcRenderer.send('settings::close-animation-complete')
+}
 
 // Computed properties
 const { theme, titleBarStyle } = storeToRefs(preferencesStore)
@@ -58,6 +80,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  removeWindowShownListener()
+  removeCloseListener()
   document.documentElement.classList.remove('preference-window')
 })
 </script>
@@ -67,6 +91,11 @@ html.preference-window,
 html.preference-window body,
 html.preference-window * {
   scrollbar-width: none !important;
+}
+
+html.preference-window,
+html.preference-window body {
+  background: transparent !important;
 }
 
 html.preference-window::-webkit-scrollbar,
@@ -88,6 +117,23 @@ html.preference-window *::-webkit-scrollbar {
   left: 0;
   display: flex;
   background: var(--editorBgColor);
+  opacity: 0;
+  transform: translateY(-20px);
+  transition:
+    opacity var(--el-transition-duration, 300ms) ease,
+    transform var(--el-transition-duration, 300ms) ease;
+  will-change: opacity, transform;
+
+  &.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  &.is-closing {
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-20px);
+  }
 
   & h1,
   & h2,
@@ -157,6 +203,12 @@ html.preference-window *::-webkit-scrollbar {
     /* Move the scrollbar below the titlebar */
     margin-top: var(--titleBarHeight);
     padding-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pref-container {
+    transition-duration: 0.01ms;
   }
 }
 </style>

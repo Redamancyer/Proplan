@@ -1,12 +1,14 @@
 <template>
   <ProplanWorkspace :style="{ '--proplan-editor-max-width': editorMaxWidth }" />
   <AboutDialog />
-  <div
-    v-if="settingsWindowVisible"
-    class="settings-window-backdrop"
-    aria-hidden="true"
-    @pointerdown="closeSettingsWindow"
-  />
+  <Transition name="settings-backdrop">
+    <div
+      v-if="settingsWindowVisible"
+      class="settings-window-backdrop"
+      aria-hidden="true"
+      @pointerdown="closeSettingsWindow"
+    />
+  </Transition>
 </template>
 
 <script setup lang="ts">
@@ -87,5 +89,22 @@ onUnmounted(() => {
   inset: 0;
   z-index: 1800;
   background: rgba(0, 0, 0, 0.24);
+}
+
+.settings-backdrop-enter-active,
+.settings-backdrop-leave-active {
+  transition: opacity var(--el-transition-duration, 300ms) ease;
+}
+
+.settings-backdrop-enter-from,
+.settings-backdrop-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-backdrop-enter-active,
+  .settings-backdrop-leave-active {
+    transition-duration: 0.01ms;
+  }
 }
 </style>
