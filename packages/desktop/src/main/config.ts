@@ -27,6 +27,7 @@ export const mainWindowOptions: Readonly<BrowserWindowConstructorOptions> = Obje
   webPreferences,
   useContentSize: true,
   show: true,
+  acceptFirstMouse: true,
   frame: false,
   titleBarStyle: 'hiddenInset'
 })
