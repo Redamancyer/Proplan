@@ -28,6 +28,7 @@ import type Accessor from './accessor'
 const ZOOM_FACTOR_STEP = 0.1
 const MIN_ZOOM_FACTOR = 0.5
 const MAX_ZOOM_FACTOR = 2
+const PREFERENCE_ZOOM_DELAY = 1000
 
 const setContentsZoom = (contents: Electron.WebContents, delta?: number): void => {
   const nextFactor = delta === undefined ? 1 : contents.getZoomFactor() + delta
@@ -40,6 +41,7 @@ class App {
   private settingsDialogVisible = false
   private allowMainClose = false
   private themeListenerRegistered = false
+  private zoomPreferenceTimer: ReturnType<typeof setTimeout> | null = null
   private readonly applicationIcon = nativeImage.createFromPath(
     app.isPackaged && isOsx
       ? path.join(process.resourcesPath, 'icon.icns')
@@ -107,6 +109,14 @@ class App {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.setZoomFactor(normalized)
     }
+  }
+
+  private schedulePreferenceZoom(factor: number): void {
+    if (this.zoomPreferenceTimer) clearTimeout(this.zoomPreferenceTimer)
+    this.zoomPreferenceTimer = setTimeout(() => {
+      this.zoomPreferenceTimer = null
+      this.applyZoomFactor(factor)
+    }, PREFERENCE_ZOOM_DELAY)
   }
 
   private updateZoom(contents: Electron.WebContents, delta?: number): void {
@@ -215,7 +225,7 @@ class App {
       const preferences = this.accessor.preferences
       nativeTheme.themeSource = getNativeThemeSource({ ...preferences.getAll(), ...change })
       if (change.language) setLanguage(change.language)
-      if (typeof change.zoomFactor === 'number') this.applyZoomFactor(change.zoomFactor)
+      if (typeof change.zoomFactor === 'number') this.schedulePreferenceZoom(change.zoomFactor)
       this.applySystemTheme()
     })
     nativeTheme.on('updated', () => this.applySystemTheme())

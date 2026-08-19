@@ -380,7 +380,7 @@
         "fontSize": "字体大小（像素）",
         "lineHeight": "行高",
         "wrapCodeBlocks": "在代码块内自动换行",
-        "editorLineWidth": "定义编辑器区域的最大宽度。允许空字符串或 ch（字符）、px（像素）或 %（百分比）后缀",
+        "editorLineWidth": "以 50% 到 100% 的百分比设置编辑器内容最大宽度",
         "codeFontSize": "代码块中的字体大小，范围是 12 ~ 18",
         "codeFontFamily": "代码块中使用的字体系列",
         "codeBlockLineNumbers": "是否显示行号",

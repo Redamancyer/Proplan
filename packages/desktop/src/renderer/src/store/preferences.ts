@@ -59,7 +59,7 @@ const defaults = (): PreferencesState => ({
   codeBlockLineNumbers: false,
   trimUnnecessaryCodeBlockEmptyLines: true,
   wrapCodeBlocks: false,
-  editorLineWidth: '',
+  editorLineWidth: '80%',
   autoPairBracket: true,
   autoPairMarkdownSyntax: true,
   autoPairQuote: true,

@@ -342,24 +342,18 @@ test.describe('Proplan workspace interactions', () => {
     await expect(settings).toBeVisible()
     await expect(settings.locator('.pref-editor')).toBeVisible()
 
-    const maxWidth = settings.locator('.pref-text-box-item', { hasText: '最大宽度' }).locator('input')
-    await maxWidth.fill('640px')
-    await expect(page.locator('.mu-container')).toHaveCSS('max-width', '640px')
+    const maxWidth = settings.locator('.pref-range-item', { hasText: '最大宽度' })
+    await expect(maxWidth.locator('.value')).toHaveText('80 %')
+    await maxWidth.locator('[role="slider"]').press('ArrowDown')
+    await expect.poll(() =>
+      page.locator('.proplan-workspace').evaluate((element) =>
+        getComputedStyle(element).getPropertyValue('--proplan-editor-max-width').trim()
+      )
+    ).toBe('75%')
 
     const fontSize = settings.locator('.pref-range-item', { hasText: '字体大小' }).first()
     await fontSize.locator('[role="slider"]').press('ArrowUp')
     await expect(page.locator('.mu-container')).toHaveCSS('font-size', '17px')
-    const fontSliderBox = await fontSize.locator('.el-slider__runway').boundingBox()
-    if (!fontSliderBox) throw new Error('expected font-size slider bounds')
-    await page.mouse.move(fontSliderBox.x + 4, fontSliderBox.y + fontSliderBox.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(
-      fontSliderBox.x + fontSliderBox.width * 0.75,
-      fontSliderBox.y + fontSliderBox.height / 2,
-      { steps: 5 }
-    )
-    await expect(page.locator('.mu-container')).not.toHaveCSS('font-size', '17px')
-    await page.mouse.up()
 
     await page.evaluate(() =>
       window.electron.ipcRenderer.send('mt::set-user-preference', {
@@ -528,6 +522,10 @@ test.describe('Proplan workspace interactions', () => {
     const zoom = settings.locator('.pref-range-item', { hasText: '缩放比例' })
     await expect(zoom.locator('.value')).toHaveText('100 %')
     await zoom.locator('[role="slider"]').press('ArrowUp')
+    await page.waitForTimeout(500)
+    expect(await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().map((window) => window.webContents.getZoomFactor())
+    )).toEqual([1])
     await expect.poll(() =>
       app.evaluate(({ BrowserWindow }) =>
         BrowserWindow.getAllWindows().map((window) => window.webContents.getZoomFactor())

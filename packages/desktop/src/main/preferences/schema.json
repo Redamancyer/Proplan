@@ -12,7 +12,7 @@
   "codeBlockLineNumbers": { "type": "boolean", "default": false },
   "trimUnnecessaryCodeBlockEmptyLines": { "type": "boolean", "default": true },
   "wrapCodeBlocks": { "type": "boolean", "default": false },
-  "editorLineWidth": { "type": "string", "pattern": "^(?:$|[0-9]+(?:ch|px|%)$)", "default": "" },
+  "editorLineWidth": { "type": "string", "pattern": "^(?:$|[0-9]+(?:ch|px|%)$)", "default": "80%" },
   "autoPairBracket": { "type": "boolean", "default": true },
   "autoPairMarkdownSyntax": { "type": "boolean", "default": true },
   "autoPairQuote": { "type": "boolean", "default": true },

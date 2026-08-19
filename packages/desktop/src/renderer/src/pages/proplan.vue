@@ -15,15 +15,14 @@ import { usePreferencesStore } from '@/store/preferences'
 import { useProplanStore } from '@/store/proplan'
 import notice from '@/services/notification'
 import { addCustomStyle, addThemeStyle } from '@/util/theme'
+import { editorWidthCss } from '@/util/editorWidth'
 
 const preferencesStore = usePreferencesStore()
 const proplanStore = useProplanStore()
 preferencesStore.SET_USER_PREFERENCE(window.proplanBoot?.initialState ?? {})
 
 const { customCss, editorLineWidth, theme } = storeToRefs(preferencesStore)
-const editorMaxWidth = computed(() =>
-  /^(?:[0-9]+(?:ch|px|%)$)/.test(editorLineWidth.value) ? editorLineWidth.value : '820px'
-)
+const editorMaxWidth = computed(() => editorWidthCss(editorLineWidth.value))
 
 watch(theme, addThemeStyle, { immediate: true })
 watch(customCss, (value) => addCustomStyle({ customCss: value }), { immediate: true })

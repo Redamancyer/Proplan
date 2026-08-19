@@ -30,12 +30,14 @@
           :value="editorFontFamily"
           :on-change="(value) => onSelectChange('editorFontFamily', value)"
         />
-        <text-box
+        <range
           :description="t('preferences.editor.textEditor.maxWidth')"
-          :notes="t('preferences.editor.textEditor.maxWidthNotes')"
-          :input="editorLineWidth"
-          :regex-validator="/^(?:$|[0-9]+(?:ch|px|%)$)/"
-          :on-change="(value) => onSelectChange('editorLineWidth', value)"
+          :value="editorWidthPercent"
+          :min="EDITOR_WIDTH_MIN_PERCENT"
+          :max="EDITOR_WIDTH_MAX_PERCENT"
+          unit="%"
+          :step="5"
+          :on-change="onEditorWidthChange"
         />
       </template>
     </compound>
@@ -145,6 +147,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { usePreferencesStore } from '@/store/preferences'
@@ -154,8 +157,12 @@ import FontTextBox from '../common/fontTextBox/index.vue'
 import Range from '../common/range/index.vue'
 import CurSelect from '../common/select/index.vue'
 import Bool from '../common/bool/index.vue'
-import TextBox from '../common/textBox/index.vue'
 import { tabSizeOptions, getTextDirectionOptions } from './config'
+import {
+  EDITOR_WIDTH_MAX_PERCENT,
+  EDITOR_WIDTH_MIN_PERCENT,
+  normalizeEditorWidthPercent
+} from '@/util/editorWidth'
 
 const { t } = useI18n()
 const preferenceStore = usePreferencesStore()
@@ -179,9 +186,14 @@ const {
   wrapCodeBlocks,
   editorLineWidth
 } = storeToRefs(preferenceStore)
+const editorWidthPercent = computed(() => normalizeEditorWidthPercent(editorLineWidth.value))
 
 const onSelectChange = (type: keyof PreferencesState, value: unknown): void => {
   preferenceStore.SET_SINGLE_PREFERENCE({ type, value })
+}
+
+const onEditorWidthChange = (value: number): void => {
+  onSelectChange('editorLineWidth', `${value}%`)
 }
 </script>
 
