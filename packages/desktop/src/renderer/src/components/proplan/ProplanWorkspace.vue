@@ -45,7 +45,11 @@
             />
             <span class="project-row-copy">
               <span class="row-title">{{ project.name }}</span>
-              <span class="row-meta">{{ systemText('openTaskCount', { count: project.tasks.filter((task) => !task.completed).length }) }}</span>
+              <span class="row-meta">{{
+                systemText('openTaskCount', {
+                  count: project.tasks.filter((task) => !task.completed).length
+                })
+              }}</span>
             </span>
           </button>
         </TransitionGroup>
@@ -281,7 +285,10 @@
             v-for="record in records"
             :key="record.id"
             class="record-row"
-            :class="{ active: record.id === selectedRecordId, dragging: draggedRecordId === record.id }"
+            :class="{
+              active: record.id === selectedRecordId,
+              dragging: draggedRecordId === record.id
+            }"
             :draggable="canReorderRecords"
             @click="store.selectRecord(record.id)"
             @contextmenu.prevent.stop="openRecordContextMenu(record, $event)"
@@ -505,6 +512,15 @@
       @contextmenu.prevent
     >
       <button
+        v-if="recordContextMenu.kind === 'record'"
+        role="menuitem"
+        @click="exportContextRecord"
+      >
+        <Download />
+        {{ systemText('export') }}
+      </button>
+      <button
+        class="danger"
         role="menuitem"
         @click="removeContextTarget"
       >
@@ -525,6 +541,7 @@ import {
   CircleCheck,
   Close,
   Delete,
+  Download,
   Edit,
   Finished,
   FolderOpened,
@@ -541,6 +558,8 @@ import {
 import { useProplanStore, type ProplanRecord } from '@/store/proplan'
 import { usePreferencesStore } from '@/store/preferences'
 import notice from '@/services/notification'
+import markdownToHtml from '@/util/markdownToHtml'
+import { buildProplanPdfHtml } from '@/util/proplanPdf'
 import {
   formatLocaleDate,
   systemTextForLocale,
@@ -737,9 +756,9 @@ const closeRecordContextMenu = (): void => {
   recordContextMenu.value = null
 }
 
-const contextMenuPosition = (event: MouseEvent): { x: number; y: number } => {
+const contextMenuPosition = (event: MouseEvent, itemCount: number): { x: number; y: number } => {
   const menuWidth = 132
-  const menuHeight = 42
+  const menuHeight = 10 + itemCount * 32
   return {
     x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
     y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8))
@@ -747,7 +766,7 @@ const contextMenuPosition = (event: MouseEvent): { x: number; y: number } => {
 }
 
 const openProjectContextMenu = (id: string, title: string, event: MouseEvent): void => {
-  recordContextMenu.value = { kind: 'project', id, title, ...contextMenuPosition(event) }
+  recordContextMenu.value = { kind: 'project', id, title, ...contextMenuPosition(event, 1) }
 }
 
 const openRecordContextMenu = (record: ProplanRecord, event: MouseEvent): void => {
@@ -755,7 +774,49 @@ const openRecordContextMenu = (record: ProplanRecord, event: MouseEvent): void =
     kind: 'record',
     id: record.id,
     title: record.title,
-    ...contextMenuPosition(event)
+    ...contextMenuPosition(event, 2)
+  }
+}
+
+const findRecordAndProject = (
+  recordId: string
+): { record: ProplanRecord; project: (typeof projects.value)[number] } | null => {
+  for (const project of projects.value) {
+    const record = [...project.memos, ...project.tasks, ...project.timeline].find(
+      (item) => item.id === recordId
+    )
+    if (record) return { record, project }
+  }
+  return null
+}
+
+const exportContextRecord = async (): Promise<void> => {
+  const target = recordContextMenu.value
+  closeRecordContextMenu()
+  if (!target || target.kind !== 'record') return
+  const match = findRecordAndProject(target.id)
+  if (!match) return
+
+  try {
+    const contentHtml = await markdownToHtml(match.record.markdown)
+    const result = await window.proplan.exportPdf({
+      title: match.record.title,
+      html: buildProplanPdfHtml(match.record, match.project, language.value, contentHtml)
+    })
+    if (result.status === 'saved') {
+      await notice.notify({
+        title: systemText('exportSucceeded'),
+        message: systemText('exportSuccessMessage', { title: match.record.title }),
+        type: 'primary',
+        time: 4000
+      })
+    }
+  } catch (error) {
+    await notice.notify({
+      title: systemText('exportFailed'),
+      message: error instanceof Error ? error.message : String(error),
+      type: 'error'
+    })
   }
 }
 
@@ -836,7 +897,9 @@ const endDrag = (): void => {
 }
 
 const updateProjectName = (event: Event): void => {
-  if (selectedProject.value) { store.updateProject(selectedProject.value.id, { name: eventValue(event) }) }
+  if (selectedProject.value) {
+    store.updateProject(selectedProject.value.id, { name: eventValue(event) })
+  }
 }
 const updateProjectDescription = (event: Event): void => {
   if (selectedProject.value) {
@@ -889,9 +952,7 @@ const openProjectCalendarItem = (recordId: string, section: ProplanSection): voi
 
 const recordMeta = (record: ProplanRecord): string => {
   if (isTask(record)) {
-    return record.dueAt
-      ? systemText('due', { date: record.dueAt })
-      : systemText('noDueDate')
+    return record.dueAt ? systemText('due', { date: record.dueAt }) : systemText('noDueDate')
   }
   if (isTimeline(record)) return formatDateTime(record.occurredAt)
   return formatSystemDate(new Date(record.updatedAt), { month: 'short', day: 'numeric' })
@@ -1553,10 +1614,13 @@ button {
   padding: 0 9px;
   border: 0;
   border-radius: 4px;
-  color: var(--deleteColor);
+  color: var(--editorColor);
   font-size: 12px;
   text-align: left;
   background: transparent;
+}
+.record-context-menu button.danger {
+  color: var(--deleteColor);
 }
 .record-context-menu button:hover {
   background: var(--editorColor10);

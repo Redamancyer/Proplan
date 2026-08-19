@@ -21,6 +21,8 @@ import {
   type ProplanImageImportResult,
   type ProplanImageSource,
   type ProplanMemo,
+  type ProplanPdfExportRequest,
+  type ProplanPdfExportResult,
   type ProplanProject,
   type ProplanRestoreRequest,
   type ProplanRestoreResult,
@@ -39,6 +41,8 @@ const MAX_BACKUP_BYTES = 1024 * 1024 * 1024
 const REMOTE_IMAGE_TIMEOUT = 30_000
 const ASSET_CLEANUP_DELAY = 5_000
 const EDITOR_FLUSH_TIMEOUT = 10_000
+const PDF_RESOURCE_TIMEOUT = 15_000
+const PDF_MAX_HTML_BYTES = 50 * 1024 * 1024
 const COLORS = new Set(['#4f7c6a', '#476d8c', '#8b6755', '#806790', '#9a7440', '#5f6b72'])
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'])
 const EXTENSION_BY_MIME = new Map([
@@ -51,6 +55,17 @@ const EXTENSION_BY_MIME = new Map([
 const pendingAssetFilenames = new Set<string>()
 const localized = (zh: string, en: string): string =>
   getCurrentLanguage().toLowerCase().startsWith('zh') ? zh : en
+
+export const sanitizePdfFilename = (title: string): string => {
+  const safeCharacters = Array.from(title, (character) =>
+    character.charCodeAt(0) < 32 || /[<>:"/\\|?*]/.test(character) ? '-' : character
+  ).join('')
+  const sanitized = safeCharacters
+    .replace(/[. ]+$/g, '')
+    .trim()
+    .slice(0, 120)
+  return sanitized || localized('未命名记录', 'Untitled record')
+}
 
 interface ProplanBackupAsset {
   filename: string
@@ -146,7 +161,10 @@ const normalizeProject = (value: unknown, projectIndex: number): ProplanProject 
       localized(`${context}的${section}列表无效`, `${context} has an invalid ${section} list`)
     )
     return input.map((entry, index) =>
-      normalize(entry, localized(`${context}的${section} ${index + 1}`, `${context} ${section} ${index + 1}`))
+      normalize(
+        entry,
+        localized(`${context}的${section} ${index + 1}`, `${context} ${section} ${index + 1}`)
+      )
     )
   }
   const color = stringValue(value.color)
@@ -159,7 +177,11 @@ const normalizeProject = (value: unknown, projectIndex: number): ProplanProject 
     updatedAt: stringValue(value.updatedAt, createdAt),
     memos: normalizeList(value.memos, localized('备忘', 'memo'), normalizeMemo),
     tasks: normalizeList(value.tasks, localized('任务', 'task'), normalizeTask),
-    timeline: normalizeList(value.timeline, localized('时间轴', 'timeline entry'), normalizeTimelineEntry)
+    timeline: normalizeList(
+      value.timeline,
+      localized('时间轴', 'timeline entry'),
+      normalizeTimelineEntry
+    )
   }
 }
 
@@ -174,12 +196,16 @@ export const normalizeProplanDatabase = (value: unknown): ProplanDatabase => {
   const recordIds = new Set<string>()
   for (const project of projects) {
     if (projectIds.has(project.id)) {
-      invalidDatabase(localized(`项目 ID 重复：${project.id}`, `Duplicate project ID: ${project.id}`))
+      invalidDatabase(
+        localized(`项目 ID 重复：${project.id}`, `Duplicate project ID: ${project.id}`)
+      )
     }
     projectIds.add(project.id)
     for (const record of [...project.memos, ...project.tasks, ...project.timeline]) {
       if (recordIds.has(record.id)) {
-        invalidDatabase(localized(`记录 ID 重复：${record.id}`, `Duplicate record ID: ${record.id}`))
+        invalidDatabase(
+          localized(`记录 ID 重复：${record.id}`, `Duplicate record ID: ${record.id}`)
+        )
       }
       recordIds.add(record.id)
     }
@@ -225,7 +251,7 @@ const assertImageBytes = (data: Buffer, extension: string): void => {
               ? ascii.startsWith('<svg') || (ascii.startsWith('<?xml') && ascii.includes('<svg'))
               : false
 
-  if (!valid) throw new Error(localized('文件内容不是受支持的图片格式', 'Unsupported image content'))
+  if (!valid) { throw new Error(localized('文件内容不是受支持的图片格式', 'Unsupported image content')) }
 }
 
 const readBoundedResponse = async(response: Response): Promise<Buffer> => {
@@ -256,7 +282,7 @@ export const readLocalImage = async(
 ): Promise<{ data: Buffer; extension: string }> => {
   const localPath = sourcePath.startsWith('file://') ? fileURLToPath(sourcePath) : sourcePath
   const stats = await fs.stat(localPath)
-  if (!stats.isFile()) throw new Error(localized('选择的路径不是文件', 'The selected path is not a file'))
+  if (!stats.isFile()) { throw new Error(localized('选择的路径不是文件', 'The selected path is not a file')) }
   if (stats.size > MAX_IMAGE_BYTES) {
     throw new Error(localized('图片不能超过 20 MB', 'Images cannot exceed 20 MB'))
   }
@@ -291,7 +317,10 @@ export const downloadRemoteImage = async(
     })
     if (!response.ok) {
       throw new Error(
-        localized(`图片下载失败（HTTP ${response.status}）`, `Image download failed (HTTP ${response.status})`)
+        localized(
+          `图片下载失败（HTTP ${response.status}）`,
+          `Image download failed (HTTP ${response.status})`
+        )
       )
     }
 
@@ -300,20 +329,27 @@ export const downloadRemoteImage = async(
     const finalProtocol = new URL(finalUrl).protocol
     if (finalProtocol !== 'http:' && finalProtocol !== 'https:') {
       throw new Error(
-        localized('图片下载重定向到了不安全的地址', 'The image download redirected to an unsafe URL')
+        localized(
+          '图片下载重定向到了不安全的地址',
+          'The image download redirected to an unsafe URL'
+        )
       )
     }
     const mime = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? ''
     const extension = EXTENSION_BY_MIME.get(mime)
     if (!extension) {
-      throw new Error(localized('链接返回的内容不是受支持的图片', 'The URL did not return a supported image'))
+      throw new Error(
+        localized('链接返回的内容不是受支持的图片', 'The URL did not return a supported image')
+      )
     }
     const data = await readBoundedResponse(response)
     assertImageBytes(data, extension)
     return { data, extension }
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error(localized('图片下载超时，请稍后重试', 'Image download timed out. Please try again'))
+      throw new Error(
+        localized('图片下载超时，请稍后重试', 'Image download timed out. Please try again')
+      )
     }
     throw error
   } finally {
@@ -327,7 +363,7 @@ export const readDataImage = (dataUrl: string): { data: Buffer; extension: strin
   )
   if (!match) throw new Error(localized('粘贴的图片数据无效', 'Invalid pasted image data'))
   const [, mime, payload] = match
-  if (!mime || !payload) throw new Error(localized('粘贴的图片数据无效', 'Invalid pasted image data'))
+  if (!mime || !payload) { throw new Error(localized('粘贴的图片数据无效', 'Invalid pasted image data')) }
   const extension = EXTENSION_BY_MIME.get(mime.toLowerCase())
   if (!extension) throw new Error(localized('不支持该图片格式', 'Unsupported image format'))
   const data = Buffer.from(payload, 'base64')
@@ -694,12 +730,88 @@ const backupProplan = async(event: Electron.IpcMainInvokeEvent): Promise<Proplan
   }
 }
 
+const waitForPdfResources = async(window: BrowserWindow): Promise<void> => {
+  await window.webContents.executeJavaScript(`
+    Promise.race([
+      Promise.all([
+        document.fonts ? document.fonts.ready : Promise.resolve(),
+        ...Array.from(document.images).map((image) => image.complete
+          ? Promise.resolve()
+          : new Promise((resolve) => {
+              image.addEventListener('load', resolve, { once: true });
+              image.addEventListener('error', resolve, { once: true });
+            }))
+      ]),
+      new Promise((resolve) => setTimeout(resolve, ${PDF_RESOURCE_TIMEOUT}))
+    ])
+  `)
+}
+
+export const exportProplanPdf = async(
+  event: Electron.IpcMainInvokeEvent,
+  request: ProplanPdfExportRequest
+): Promise<ProplanPdfExportResult> => {
+  if (
+    !request ||
+    typeof request.title !== 'string' ||
+    typeof request.html !== 'string' ||
+    Buffer.byteLength(request.html, 'utf8') > PDF_MAX_HTML_BYTES
+  ) {
+    throw new Error(localized('PDF 导出内容无效', 'Invalid PDF export content'))
+  }
+
+  const owner = BrowserWindow.fromWebContents(event.sender)
+  const filename = `${sanitizePdfFilename(request.title)}.pdf`
+  const options: Electron.SaveDialogOptions = {
+    title: localized('导出 PDF', 'Export PDF'),
+    defaultPath: path.join(app.getPath('documents'), filename),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  }
+  const result = owner
+    ? await dialog.showSaveDialog(owner, options)
+    : await dialog.showSaveDialog(options)
+  if (result.canceled || !result.filePath) return { status: 'cancelled' }
+
+  const filePath = /\.pdf$/i.test(result.filePath) ? result.filePath : `${result.filePath}.pdf`
+  const temporaryDirectory = await fs.mkdtemp(path.join(app.getPath('temp'), 'proplan-pdf-'))
+  const htmlPath = path.join(temporaryDirectory, 'record.html')
+  let printWindow: BrowserWindow | null = null
+  try {
+    await fs.writeFile(htmlPath, request.html, 'utf8')
+    printWindow = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
+    })
+    printWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    printWindow.webContents.on('will-navigate', (navigationEvent) =>
+      navigationEvent.preventDefault()
+    )
+    await printWindow.loadFile(htmlPath)
+    await waitForPdfResources(printWindow)
+    const pdf = await printWindow.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true
+    })
+    await writeFileAtomic(filePath, pdf)
+    return { status: 'saved', filePath }
+  } finally {
+    if (printWindow && !printWindow.isDestroyed()) printWindow.destroy()
+    await fs.remove(temporaryDirectory)
+  }
+}
+
 export const parseProplanBackup = (source: string): ProplanBackupDocument => {
   let value: unknown
   try {
     value = JSON.parse(source) as unknown
   } catch {
-    throw new Error(localized('这不是有效的 Proplan 备份文件', 'This is not a valid Proplan backup'))
+    throw new Error(
+      localized('这不是有效的 Proplan 备份文件', 'This is not a valid Proplan backup')
+    )
   }
   if (!isObject(value) || value.format !== BACKUP_FORMAT || value.version !== BACKUP_VERSION) {
     throw new Error(
@@ -722,14 +834,18 @@ export const parseProplanBackup = (source: string): ProplanBackupDocument => {
   try {
     sourceAssetsUrl = new URL(value.sourceAssetsUrl)
   } catch {
-    throw new Error(localized('备份中的图片来源路径无效', 'The backup contains an invalid image source path'))
+    throw new Error(
+      localized('备份中的图片来源路径无效', 'The backup contains an invalid image source path')
+    )
   }
   if (
     sourceAssetsUrl.protocol !== 'file:' ||
     !/(?:^|[\\/])proplan-assets[\\/]?$/.test(value.sourceAssetsPath) ||
     !/(?:^|\/)proplan-assets\/?$/.test(sourceAssetsUrl.pathname)
   ) {
-    throw new Error(localized('备份中的图片来源路径无效', 'The backup contains an invalid image source path'))
+    throw new Error(
+      localized('备份中的图片来源路径无效', 'The backup contains an invalid image source path')
+    )
   }
 
   const filenames = new Set<string>()
@@ -742,11 +858,16 @@ export const parseProplanBackup = (source: string): ProplanBackupDocument => {
       typeof entry.data !== 'string' ||
       typeof entry.sha256 !== 'string'
     ) {
-      throw new Error(localized('备份中的图片清单无效', 'The backup contains an invalid image manifest'))
+      throw new Error(
+        localized('备份中的图片清单无效', 'The backup contains an invalid image manifest')
+      )
     }
     if (filenames.has(entry.filename)) {
       throw new Error(
-        localized(`备份中存在重复图片：${entry.filename}`, `Duplicate image in backup: ${entry.filename}`)
+        localized(
+          `备份中存在重复图片：${entry.filename}`,
+          `Duplicate image in backup: ${entry.filename}`
+        )
       )
     }
     filenames.add(entry.filename)
@@ -762,7 +883,10 @@ export const parseProplanBackup = (source: string): ProplanBackupDocument => {
     const data = Buffer.from(entry.data, 'base64')
     if (data.byteLength > MAX_IMAGE_BYTES || data.toString('base64') !== entry.data) {
       throw new Error(
-        localized(`备份中的图片数据无效：${entry.filename}`, `Invalid image data in backup: ${entry.filename}`)
+        localized(
+          `备份中的图片数据无效：${entry.filename}`,
+          `Invalid image data in backup: ${entry.filename}`
+        )
       )
     }
     assertImageBytes(data, extension)
@@ -841,7 +965,9 @@ const applyBackupDocument = async(backup: ProplanBackupDocument): Promise<void> 
     await fs.remove(dataPath)
     await fs.remove(assetsPath)
     if (hadData && (await fs.pathExists(rollbackData))) await fs.move(rollbackData, dataPath)
-    if (hadAssets && (await fs.pathExists(rollbackAssets))) { await fs.move(rollbackAssets, assetsPath) }
+    if (hadAssets && (await fs.pathExists(rollbackAssets))) {
+      await fs.move(rollbackAssets, assetsPath)
+    }
     ipcMain.emit('set-user-preference', previousPreferences)
     throw error
   } finally {
@@ -881,9 +1007,7 @@ const restoreProplan = async(
 
   const stats = await fs.stat(backupPath)
   if (!stats.isFile() || stats.size > MAX_BACKUP_BYTES) {
-    throw new Error(
-      localized('备份文件无效或超过 1 GB', 'The backup is invalid or exceeds 1 GB')
-    )
+    throw new Error(localized('备份文件无效或超过 1 GB', 'The backup is invalid or exceeds 1 GB'))
   }
   const backup = parseProplanBackup(await fs.readFile(backupPath, 'utf8'))
   const confirmationOptions: Electron.MessageBoxOptions = {
@@ -932,6 +1056,7 @@ export const registerProplanHandlers = (): void => {
     return shell.openPath(assetsPath)
   })
   ipcMain.handle('mt::proplan::backup', backupProplan)
+  ipcMain.handle('mt::proplan::export-pdf', exportProplanPdf)
   ipcMain.handle('mt::proplan::load', loadDatabase)
   ipcMain.handle('mt::proplan::import-image', importImage)
   ipcMain.handle('mt::proplan::restore', restoreProplan)

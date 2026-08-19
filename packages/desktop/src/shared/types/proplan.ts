@@ -72,6 +72,16 @@ export interface ProplanBackupResult {
   assetCount?: number
 }
 
+export interface ProplanPdfExportRequest {
+  title: string
+  html: string
+}
+
+export interface ProplanPdfExportResult {
+  status: 'saved' | 'cancelled'
+  filePath?: string
+}
+
 export interface ProplanRestoreRequest {
   confirmTitle: string
   confirmMessage: string

@@ -11,6 +11,8 @@ import type {
   ProplanDatabase,
   ProplanImageImportResult,
   ProplanImageSource,
+  ProplanPdfExportRequest,
+  ProplanPdfExportResult,
   ProplanRestoreRequest,
   ProplanRestoreResult
 } from '@shared/types/proplan'
@@ -85,6 +87,7 @@ declare global {
     getAssetsPath(): Promise<string>
     openAssetsFolder(): Promise<string>
     backup(): Promise<ProplanBackupResult>
+    exportPdf(request: ProplanPdfExportRequest): Promise<ProplanPdfExportResult>
     load(): Promise<ProplanDatabase>
     importImage(source: ProplanImageSource): Promise<ProplanImageImportResult | null>
     restore(request: ProplanRestoreRequest): Promise<ProplanRestoreResult>

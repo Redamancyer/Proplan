@@ -3,6 +3,8 @@ import type {
   ProplanDatabase,
   ProplanImageImportResult,
   ProplanImageSource,
+  ProplanPdfExportRequest,
+  ProplanPdfExportResult,
   ProplanRestoreRequest,
   ProplanRestoreResult
 } from './proplan'
@@ -15,6 +17,10 @@ export interface IpcInvokeChannels {
   'mt::i18n::load': { args: [language: string]; ret: Record<string, unknown> }
   'mt::licenses::read': { args: [kind: LicenseDocumentKind]; ret: string }
   'mt::proplan::backup': { args: []; ret: ProplanBackupResult }
+  'mt::proplan::export-pdf': {
+    args: [request: ProplanPdfExportRequest]
+    ret: ProplanPdfExportResult
+  }
   'mt::proplan::assets-path': { args: []; ret: string }
   'mt::proplan::load': { args: []; ret: ProplanDatabase }
   'mt::proplan::open-assets-folder': { args: []; ret: string }

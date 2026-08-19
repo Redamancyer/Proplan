@@ -10,6 +10,7 @@ import type {
 import type {
   ProplanDatabase,
   ProplanImageSource,
+  ProplanPdfExportRequest,
   ProplanRestoreRequest
 } from '@shared/types/proplan'
 import type { LicenseDocumentKind } from '@shared/types/licenses'
@@ -102,6 +103,7 @@ const proplanAPI = {
   getAssetsPath: () => invoke('mt::proplan::assets-path'),
   openAssetsFolder: () => invoke('mt::proplan::open-assets-folder'),
   backup: () => invoke('mt::proplan::backup'),
+  exportPdf: (request: ProplanPdfExportRequest) => invoke('mt::proplan::export-pdf', request),
   load: () => invoke('mt::proplan::load'),
   importImage: (source: ProplanImageSource) => invoke('mt::proplan::import-image', source),
   restore: (request: ProplanRestoreRequest) => invoke('mt::proplan::restore', request),
