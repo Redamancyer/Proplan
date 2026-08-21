@@ -1,6 +1,6 @@
 {
   "name": "proplan-monorepo",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Proplan desktop app monorepo",
   "private": true,
   "packageManager": "pnpm@10.33.4",
