@@ -99,6 +99,8 @@
   /* Notification colors */
   --notificationPrimaryColor: #ffffff;
   --notificationPrimaryBg: var(--themeColor);
+  --notificationSuccessColor: #ffffff;
+  --notificationSuccessBg: #20b26b;
   --notificationInfoColor: #ffffff;
   --notificationInfoBg: #909399;
   --notificationWarningColor: #ffffff;

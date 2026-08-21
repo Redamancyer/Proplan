@@ -80,7 +80,7 @@ const createBackup = async (): Promise<void> => {
     await notice.notify({
       title: systemText('backupSucceeded'),
       message: systemText('backupSuccessMessage', { count: result.assetCount ?? 0 }),
-      type: 'primary'
+      type: 'success'
     })
   } catch (error) {
     await notice.notify({
@@ -107,7 +107,7 @@ const restoreBackup = async (): Promise<void> => {
     await notice.notify({
       title: systemText('restoreSucceeded'),
       message: systemText('restoreSuccessMessage', { count: result.assetCount ?? 0 }),
-      type: 'primary'
+      type: 'success'
     })
   } catch (error) {
     await notice.notify({

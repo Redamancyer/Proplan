@@ -122,6 +122,14 @@
       color: var(--notificationPrimaryColor);
     }
   }
+  &.mt-success {
+    & > .notice-bg {
+      background: var(--notificationSuccessBg);
+    }
+    & > .content {
+      color: var(--notificationSuccessColor);
+    }
+  }
   &.mt-info {
     & > .notice-bg {
       background: var(--notificationInfoBg);

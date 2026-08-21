@@ -797,6 +797,7 @@ export const exportProplanPdf = async(
       preferCSSPageSize: true
     })
     await writeFileAtomic(filePath, pdf)
+    shell.showItemInFolder(filePath)
     return { status: 'saved', filePath }
   } finally {
     if (printWindow && !printWindow.isDestroyed()) printWindow.destroy()

@@ -52,7 +52,7 @@ vi.mock('electron', () => ({
   },
   ipcMain: { handle: vi.fn(), on: vi.fn(), removeListener: vi.fn() },
   net: { fetch: vi.fn() },
-  shell: { openPath: vi.fn() }
+  shell: { openPath: vi.fn(), showItemInFolder: vi.fn() }
 }))
 
 import { exportProplanPdf, sanitizePdfFilename } from 'main_renderer/ipc/proplan'
@@ -96,6 +96,8 @@ describe('Proplan PDF export', () => {
       preferCSSPageSize: true,
       printBackground: true
     })
+    const { shell } = await import('electron')
+    expect(shell.showItemInFolder).toHaveBeenCalledWith(outputPath)
     expect(electronMock.window.destroy).toHaveBeenCalled()
   })
 

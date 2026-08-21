@@ -55,7 +55,16 @@ test.describe('PDF export context menu', () => {
     }, exportPath)
     await page.locator('.record-row').first().click({ button: 'right' })
     await page.getByRole('menuitem', { name: '导出' }).click()
-    await expect(page.locator('.mt-notification')).toContainText('导出成功')
+    const successNotification = page.locator('.mt-notification.mt-success')
+    await expect(successNotification).toContainText('导出成功')
+    await expect(successNotification.locator('.notification-icon path')).toHaveAttribute(
+      'd',
+      'm5 12 4 4L19 6'
+    )
+    await expect(successNotification.locator('.notice-bg')).toHaveCSS(
+      'background-color',
+      'rgb(32, 178, 107)'
+    )
     await expect.poll(() => fs.existsSync(exportPath)).toBe(true)
 
     const pdf = fs.readFileSync(exportPath)

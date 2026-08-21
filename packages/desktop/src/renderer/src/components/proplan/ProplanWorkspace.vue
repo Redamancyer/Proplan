@@ -808,7 +808,7 @@ const exportContextRecord = async (): Promise<void> => {
       await notice.notify({
         title: systemText('exportSucceeded'),
         message: systemText('exportSuccessMessage', { title: match.record.title }),
-        type: 'primary',
+        type: 'success',
         time: 4000
       })
     }

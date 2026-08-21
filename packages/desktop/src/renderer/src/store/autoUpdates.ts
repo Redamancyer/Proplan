@@ -33,7 +33,7 @@ export const useAutoUpdatesStore = defineStore('autoUpdates', () => {
     window.electron.ipcRenderer.on('mt::UPDATE_NOT_AVAILABLE', (_e, message) => {
       notice.notify({
         title: '检查更新',
-        type: 'primary',
+        type: 'success',
         message: String(message ?? '')
       }).catch(() => undefined)
     })

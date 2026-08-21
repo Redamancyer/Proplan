@@ -2,16 +2,18 @@ import template from './index.html?raw'
 import DOMPurify from 'dompurify'
 import './index.css'
 
-export type NotificationType = 'primary' | 'error' | 'warning' | 'info'
+export type NotificationType = 'primary' | 'success' | 'error' | 'warning' | 'info'
 
-const INON_HASH: Record<NotificationType, string> = {
-  primary: 'icon-message',
-  error: 'icon-error',
-  warning: 'icon-warn',
-  info: 'icon-info'
+const ICON_HASH: Record<NotificationType, string> = {
+  primary: '<circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/>',
+  success: '<path d="m5 12 4 4L19 6"/>',
+  error: '<path d="m7 7 10 10M17 7 7 17"/>',
+  warning: '<path d="M12 6v7M12 17h.01"/>',
+  info: '<path d="M12 11v6M12 7h.01"/>'
 }
 const TYPE_HASH: Record<NotificationType, string> = {
   primary: 'mt-primary',
+  success: 'mt-success',
   error: 'mt-error',
   warning: 'mt-warn',
   info: 'mt-info'
@@ -21,7 +23,7 @@ const getUniqueId = (): string => `proplan-notification-${++notificationId}`
 
 const fillTemplate = (type: NotificationType, title: string, message: string): string => {
   return template
-    .replace(/\{\{icon\}\}/, INON_HASH[type])
+    .replace(/\{\{icon\}\}/, ICON_HASH[type])
     .replace(/\{\{title\}\}/, DOMPurify.sanitize(title))
     .replace(/\{\{message\}\}/, DOMPurify.sanitize(message))
 }
@@ -57,7 +59,7 @@ const notification: NotificationService = {
     time = 10000,
     title = '',
     message = '',
-    type = 'primary', // primary, error, warning or info
+    type = 'primary',
     showConfirm = false
   }: NotifyOptions): Promise<void> {
     let rs: (() => void) | undefined
