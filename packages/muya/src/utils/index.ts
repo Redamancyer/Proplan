@@ -222,8 +222,25 @@ export function getParagraphReference(ele: HTMLElement, id: string) {
     };
 }
 
-function visibleLength(str: string) {
-    return [...new Intl.Segmenter().segment(str)].length;
+function unicodeLength(str: string) {
+    return [...str].length;
+}
+
+export function hasUnpairedSurrogate(str: string) {
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        if (code >= 0xD800 && code <= 0xDBFF) {
+            const next = str.charCodeAt(i + 1);
+            if (i + 1 >= str.length || next < 0xDC00 || next > 0xDFFF)
+                return true;
+            i++;
+        }
+        else if (code >= 0xDC00 && code <= 0xDFFF) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 export type TDiff = (string | number | { d: string });
@@ -242,7 +259,7 @@ export function diffToTextOp(diffs: Diff[]) {
                 break;
 
             case 0:
-                op.push(visibleLength(diff[1]));
+                op.push(unicodeLength(diff[1]));
                 break;
 
             case 1:

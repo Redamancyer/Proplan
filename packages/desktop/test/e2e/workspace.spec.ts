@@ -331,6 +331,42 @@ test.describe('Proplan workspace interactions', () => {
     await expect(page.locator('.proplan-editor-host')).toContainText('撤销快捷键测试')
   })
 
+  test('keeps unicode symbols intact while editing and replaying history', async() => {
+    const editorHost = page.locator('.proplan-editor-host')
+    const editor = editorHost.locator('[contenteditable="true"]').first()
+    const symbols = [
+      '\uD83C\uDFE0',
+      '\u2600\uFE0F',
+      '\uD83D\uDC69\uD83C\uDFFD\u200D\uD83D\uDCBB',
+      '\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66',
+      '\uD83C\uDDE8\uD83C\uDDF3',
+      '\uD842\uDFB7'
+    ].join('')
+    const rendererErrors: string[] = []
+    const captureRendererError = (error: Error): void => {
+      rendererErrors.push(error.message)
+    }
+    page.on('pageerror', captureRendererError)
+
+    try {
+      await editor.click()
+      await page.keyboard.insertText(symbols)
+      await page.keyboard.insertText('X')
+      await expect(editorHost).toContainText(`${symbols}X`)
+
+      const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+      await page.keyboard.press(`${modifier}+Z`)
+      await expect(editorHost).not.toContainText(`${symbols}X`)
+
+      const redo = process.platform === 'darwin' ? 'Shift+Meta+Z' : 'Control+Y'
+      await page.keyboard.press(redo)
+      await expect(editorHost).toContainText(`${symbols}X`)
+      expect(rendererErrors).toEqual([])
+    } finally {
+      page.off('pageerror', captureRendererError)
+    }
+  })
+
   test('filters project lists by multiple selected calendar dates', async() => {
     await page.getByTitle('关闭编辑器').click()
     await expect(page.locator('.project-filter-date-picker')).toHaveCount(0)

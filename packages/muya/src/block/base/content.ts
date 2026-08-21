@@ -12,6 +12,7 @@ import Selection from '../../selection';
 import {
     adjustOffset,
     diffToTextOp,
+    hasUnpairedSurrogate,
     isInputEvent,
     isKeyboardEvent,
     isMouseEvent,
@@ -365,6 +366,11 @@ class Content extends TreeNode {
     }
 
     set text(text) {
+        // Some native input methods briefly expose one half of a surrogate pair.
+        // Keep the last valid model value until the following complete input arrives.
+        if (hasUnpairedSurrogate(text))
+            return;
+
         const oldText = this._text;
         this._text = text;
         const { path } = this;
