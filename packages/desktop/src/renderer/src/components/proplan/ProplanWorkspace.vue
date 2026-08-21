@@ -430,6 +430,7 @@
             <el-date-picker
               v-else
               class="proplan-date-picker timeline-date-picker"
+              popper-class="proplan-datetime-popper"
               style="width: auto; --el-date-editor-width: auto"
               :class="{ empty: !selectedRecord.occurredAt }"
               :model-value="dateTimeLocalValue(selectedRecord.occurredAt)"
@@ -1779,6 +1780,20 @@ button {
 }
 :deep(.proplan-date-picker.empty .el-input__inner) {
   color: var(--muted);
+}
+:global(.proplan-datetime-popper .el-date-picker__time-header .el-input__wrapper) {
+  border: 1px solid var(--editorColor10);
+  background: transparent !important;
+  box-shadow: none !important;
+}
+:global(.proplan-datetime-popper .el-date-picker__time-header .el-input__wrapper.is-focus) {
+  border-color: var(--themeColor);
+  box-shadow: none !important;
+}
+:global(.proplan-datetime-popper .el-date-picker__time-header .el-input__inner) {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 :deep(.task-priority-select) {
   --el-select-border-color-hover: transparent;

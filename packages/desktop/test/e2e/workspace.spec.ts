@@ -242,6 +242,34 @@ test.describe('Proplan workspace interactions', () => {
     expect(timelinePickerMetrics.wrapperBackground).toBe('rgba(0, 0, 0, 0)')
     expect(timelinePickerMetrics.inputBackground).toBe('rgba(0, 0, 0, 0)')
     expect(timelinePickerMetrics.inputBorderWidth).toBe('0px')
+    await page.getByLabel('发生日期和时间').click()
+    const datetimeHeaderMetrics = await page
+      .locator('.proplan-datetime-popper:visible .el-date-picker__time-header')
+      .evaluate((header) =>
+        [...header.querySelectorAll<HTMLElement>('.el-input__wrapper')].map((wrapper) => {
+          const input = wrapper.querySelector<HTMLElement>('.el-input__inner')
+          return {
+            wrapperBackground: getComputedStyle(wrapper).backgroundColor,
+            wrapperShadow: getComputedStyle(wrapper).boxShadow,
+            wrapperBorderWidth: getComputedStyle(wrapper).borderWidth,
+            inputBackground: input ? getComputedStyle(input).backgroundColor : '',
+            inputShadow: input ? getComputedStyle(input).boxShadow : '',
+            inputBorderWidth: input ? getComputedStyle(input).borderWidth : ''
+          }
+        })
+      )
+    expect(datetimeHeaderMetrics).toHaveLength(2)
+    for (const metrics of datetimeHeaderMetrics) {
+      expect(metrics).toEqual({
+        wrapperBackground: 'rgba(0, 0, 0, 0)',
+        wrapperShadow: 'none',
+        wrapperBorderWidth: '1px',
+        inputBackground: 'rgba(0, 0, 0, 0)',
+        inputShadow: 'none',
+        inputBorderWidth: '0px'
+      })
+    }
+    await page.keyboard.press('Escape')
     await page.locator('.timeline-date-picker').evaluate((element) => {
       const component = (element as Element & { __vueParentComponent?: { emit?: (event: string, value: string) => void } }).__vueParentComponent
       component?.emit?.('update:modelValue', '2026-08-18T09:30')
@@ -309,7 +337,7 @@ test.describe('Proplan workspace interactions', () => {
 
     const clearDates = page.getByRole('button', { name: '清除', exact: true })
     const projectSearch = page.getByRole('searchbox', { name: '搜索项目记录' })
-    const day19 = page.locator('.calendar-day[data-date="2026-08-19"]')
+    const currentDay = page.locator('.calendar-day.today')
     const day20 = page.locator('.calendar-day[data-date="2026-08-20"]')
     const day21 = page.locator('.calendar-day[data-date="2026-08-21"]')
     await expect(clearDates).toBeDisabled()
@@ -337,12 +365,12 @@ test.describe('Proplan workspace interactions', () => {
     await page.getByRole('button', { name: '备忘', exact: true }).click()
     await expect(page.locator('.record-row')).toHaveCount(0)
 
-    await day19.locator('.day-heading').click()
-    await expect(day19).toHaveClass(/selected/)
+    await currentDay.locator('.day-heading').click()
+    await expect(currentDay).toHaveClass(/selected/)
     await expect(page.locator('.calendar-day.selected')).toHaveCount(2)
     await expect(page.locator('.record-row')).toHaveCount(3)
 
-    await day19.locator('.calendar-task').first().click()
+    await currentDay.locator('.calendar-task').first().click()
     await expect(page.locator('.proplan-editor-host')).toBeVisible()
     await page.getByTitle('关闭编辑器').click()
     await expect(page.locator('.calendar-day.selected')).toHaveCount(2)
